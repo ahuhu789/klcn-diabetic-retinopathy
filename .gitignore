@@ -45,3 +45,7 @@ venv.bak/
 tmp/
 temp/
 scratch/
+
+# Separate Sub-repositories
+fundus-gate/
+
