@@ -1,0 +1,52 @@
+name: dr_fundus_mobile
+description: "RetinaGuard AI - Hệ thống Di động Sàng lọc & Phân độ Võng mạc Đáy mắt (KLCN HUIT)"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Networking & HTTP
+  dio: ^5.7.0
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # Image Picking & Camera
+  image_picker: ^1.1.2
+
+  # Interactive Image Viewing (Pinch & Zoom for Heatmaps)
+  photo_view: ^0.15.0
+
+  # PDF Report Generation & Printing
+  pdf: ^3.11.1
+  printing: ^5.13.2
+
+  # Local Persistence & Storage
+  shared_preferences: ^2.3.3
+  path_provider: ^2.1.5
+
+  # Formatting & Utilities
+  intl: ^0.19.0
+  share_plus: ^10.1.4
+  cupertino_icons: ^1.0.8
+  onnxruntime: ^1.4.1
+
+  image: ^4.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/models/

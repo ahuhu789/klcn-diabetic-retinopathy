@@ -1,0 +1,18 @@
+{
+  "id": "nguynhuythanh/klcn-model-c-retinal-multilabel",
+  "title": "KLCN Model C Retinal Multilabel",
+  "code_file": "model_c_experiments.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "andrewmvd/retinal-disease-classification",
+    "andrewmvd/ocular-disease-recognition-odir5k"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}

@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -37,15 +37,55 @@ venv.bak/
 *.h5
 *.ckpt
 
+# Mobile ONNX Edge Models (included in mobile app bundle)
+!dr_fundus_mobile/assets/models/*.onnx
+
+# Binary build artifacts & APKs (>100MB exceed GitHub limit)
+*.apk
+*.zip
+
 # Agent internal configs
 .agents/
 .agent/
 
-# Temp folders
+# Temp folders & scratch scripts
 tmp/
 temp/
 scratch/
+dumped_images/
+report_demo_screenshots/
+kaggle_new_check/
+kaggle_notebook_pull/
 
-# Separate Sub-repositories
+# Separate Sub-repositories & Projects
 fundus-gate/
+pubg-bigdata-project/
+model_c/experiments_output/
+
+# Local tools & executables
+tools/
+cloudflared.exe
+*.exe
+
+# Local scratch logs & test captures
+*.log
+phone_screen.png
+suspicious_pairs.csv
+duplicate_audit_report.json
+kernel_logs_new.txt
+Bao_Cao_Thuc_Tap_Nghe_Nghiep_*.docx
+capture_*.py
+run_tarot_*.py
+test_click_spread.py
+dump_cells.py
+dump_docx_images.py
+inspect_nb.py
+inspect_new_nb.py
+check_danh_muc.py
+check_styles.py
+check_packages.py
+temp_hf_*.py
+temp_hf_*.txt
+
+
 

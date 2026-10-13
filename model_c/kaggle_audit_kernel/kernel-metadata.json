@@ -1,0 +1,18 @@
+{
+  "id": "nguynhuythanh/klcn-model-c-duplicate-audit",
+  "title": "KLCN Model C Duplicate Audit",
+  "code_file": "duplicate_audit.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "andrewmvd/retinal-disease-classification",
+    "andrewmvd/ocular-disease-recognition-odir5k"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}
