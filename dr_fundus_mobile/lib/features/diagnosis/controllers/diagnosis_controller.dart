@@ -207,10 +207,7 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
         return;
       }
 
-      // 2. CHẠY SÀNG LỌC ĐA NHÃN MODEL C TRỰC TIẾP TRÊN ĐIỆN THOẠI (ON-DEVICE EDGE)
-      final localModelC = await localService.predictModelCOnDevice(state.imageBytes!);
-
-      // 3. GỬI LÊN CLOUD SERVER ĐỂ PHÂN TÍCH CHUYÊN SÂU MODEL B (ViT + GRAD-CAM)
+      // 2. GỬI LÊN SERVER ĐỂ CHẠY ENSEMBLE 6 LỚP (MODEL B)
       PredictionResponse res;
       try {
         if (state.selectedFile != null) {
@@ -234,35 +231,14 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
           );
         }
 
-        // Nếu cloud chưa có Model C, điền kết quả Model C đã tính tại thiết bị
-        if (res.modelCResult == null && localModelC != null) {
-          res = PredictionResponse(
-            isFundus: res.isFundus,
-            fundusConfidence: res.fundusConfidence,
-            threshold: res.threshold,
-            message: res.message,
-            processingTimeMs: res.processingTimeMs,
-            modelStatus: res.modelStatus,
-            drResnet: res.drResnet,
-            drVit: res.drVit,
-            drResult: res.drResult,
-            drError: res.drError,
-            modelCResult: localModelC,
-            modelCError: null,
-            clinicalDisclaimer: res.clinicalDisclaimer,
-          );
-        }
-      } catch (cloudError) {
-        // 4. DỰ PHÒNG NGOẠI TUYẾN 100% (OFFLINE FALLBACK MODE)
-        // Khi không có mạng hoặc server tắt, app vẫn trả về kết quả Model A + Model C từ chip điện thoại
+      } catch (_) {
         res = PredictionResponse(
           isFundus: true,
           fundusConfidence: gateRes.confidence,
           threshold: gateRes.threshold,
-          message: 'Sàng lọc ngoại tuyến thành công tại thiết bị (Edge AI).',
-          modelCResult: localModelC,
-          drError: 'Cloud ViT ngoại tuyến. Cần kết nối Internet để phân tích chuyên sâu cấp độ DR và bản đồ nhiệt.',
-          clinicalDisclaimer: 'Ứng dụng đang vận hành ở chế độ ngoại tuyến (On-Device Edge). Kết quả sàng lọc chỉ mang tính tham khảo.',
+          message: 'Ảnh đáy mắt hợp lệ trên máy, nhưng không gọi được server Model B.',
+          drError: 'Cần kết nối tới backend để chạy ensemble 6 lớp và bản đồ nhiệt. Model B không chạy trên điện thoại.',
+          clinicalDisclaimer: 'Cổng kiểm tra ảnh chạy trên máy. Phân loại 6 lớp cần server.',
         );
       }
 

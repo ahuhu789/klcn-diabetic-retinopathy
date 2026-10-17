@@ -1,16 +1,15 @@
 """
 Comprehensive End-to-End Application Test for dr-fundus-app
 Validates complete user flow:
-1. Health check & model initialization (Models A, B, C)
+1. Health check and model initialization (Model A gate, Model B 6-class ensemble)
 2. Sample images catalog
 3. Frontend static distribution serving (index.html, CSS, JS)
 4. Valid fundus image analysis:
    - Model A (Gate) accepts
-   - Model B (DR Staging) infers 5-class distribution + Heatmaps
-   - Model C (Multi-label) infers 10-disease probabilities + calibrated thresholds
+   - Model B infers 6 classes and heatmaps
 5. Non-fundus image rejection:
    - Model A rejects
-   - Pipeline stops immediately without executing Models B or C
+   - Pipeline stops immediately without executing Model B
 6. Invalid/corrupted file handling (HTTP 400)
 7. Consecutive multi-image uploads (No state leakage or reload overhead)
 """
@@ -65,7 +64,7 @@ class TestAppEndToEnd(unittest.TestCase):
         self.assertEqual(data["status"], "healthy")
         self.assertTrue(data["gate_loaded"], "Model A Gate is not loaded!")
         self.assertTrue(data["classifier_loaded"], "Model B Classifier is not loaded!")
-        self.assertTrue(data["model_c_loaded"], "Model C Classifier is not loaded!")
+        self.assertEqual(data["num_classes"], 6)
         self.assertEqual(data["gate_threshold"], 0.965)
 
     def test_02_samples_catalog(self):
@@ -81,6 +80,9 @@ class TestAppEndToEnd(unittest.TestCase):
     def test_03_frontend_static_serving(self):
         """Test that the production React build is properly served at root /."""
         print("\n[E2E Test 3] Testing Frontend static distribution serving at /...")
+        frontend_dist = os.path.join(os.path.dirname(backend_dir), "frontend", "dist", "index.html")
+        if not os.path.exists(frontend_dist):
+            self.skipTest("frontend/dist is not built")
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers.get("content-type", ""))
@@ -89,7 +91,7 @@ class TestAppEndToEnd(unittest.TestCase):
 
     def test_04_valid_fundus_prediction(self):
         """Test full pipeline analysis on a valid fundus image."""
-        print("\n[E2E Test 4] Testing valid fundus image analysis (Models A + B + C)...")
+        print("\n[E2E Test 4] Testing valid fundus image analysis (Models A + B)...")
         with open(self.valid_image_path, "rb") as f:
             file_bytes = f.read()
 
@@ -107,18 +109,12 @@ class TestAppEndToEnd(unittest.TestCase):
 
         # Model B verification
         self.assertIsNotNone(data["dr_result"])
-        self.assertIn(data["dr_result"]["stage"], [0, 1, 2, 3, 4])
-        self.assertEqual(len(data["dr_result"]["probabilities"]), 5)
-        print(f"Model B Stage: {data['dr_result']['stage']} ({data['dr_result']['badge']}), Conf: {data['dr_result']['confidence']:.4f}")
-
-        # Model C verification
-        self.assertIsNotNone(data["model_c_result"])
-        model_c = data["model_c_result"]
-        self.assertIn("overall_disease_risk", model_c)
-        self.assertEqual(len(model_c["full_probabilities"]), 10)
-        print(f"Model C Overall Risk: {model_c['overall_disease_risk']}, Detected Conditions: {model_c['num_detected_conditions']}")
-        for d in model_c["detected_diseases"]:
-            print(f"  - Detected: {d['code']} ({d['name']}) -> {d['confidence_pct']}%")
+        self.assertIn(data["dr_result"]["stage"], [0, 1, 2, 3, 4, 5])
+        self.assertEqual(len(data["dr_result"]["probabilities"]), 6)
+        self.assertIsNotNone(data["dr_resnet"])
+        self.assertIsNotNone(data["dr_vit"])
+        self.assertNotIn("model_c_result", data)
+        print(f"Ensemble stage: {data['dr_result']['stage']} ({data['dr_result']['badge']}), Conf: {data['dr_result']['confidence']:.4f}")
 
         # System metadata
         self.assertIsNotNone(data.get("processing_time_ms"))
@@ -141,9 +137,9 @@ class TestAppEndToEnd(unittest.TestCase):
         self.assertLess(data["fundus_confidence"], 0.965)
         self.assertIn("bị từ chối", data["message"])
 
-        # Models B and C must NOT be executed
         self.assertIsNone(data["dr_result"])
-        self.assertIsNone(data["model_c_result"])
+        self.assertIsNone(data["dr_resnet"])
+        self.assertIsNone(data["dr_vit"])
         print(f"Successfully rejected non-fundus image (Confidence: {data['fundus_confidence']:.4f} < 0.965). Pipeline stopped safely.")
 
     def test_06_corrupted_file_handling(self):
@@ -173,7 +169,7 @@ class TestAppEndToEnd(unittest.TestCase):
             data = res.json()
             self.assertTrue(data["is_fundus"])
             self.assertIsNotNone(data["dr_result"])
-            self.assertIsNotNone(data["model_c_result"])
+            self.assertEqual(len(data["dr_result"]["probabilities"]), 6)
         print("Completed 5 consecutive uploads with 100% success!")
 
 if __name__ == "__main__":

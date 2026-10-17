@@ -1,4 +1,4 @@
-# RetinaGuard Mobile: Ứng dụng Di động Sàng lọc & Phân độ Võng mạc Đáy mắt (3-Model AI)
+# RetinaGuard Mobile: cổng ảnh trên máy và ensemble 6 lớp trên server
 
 > **Khóa Luận Tốt Nghiệp Ngành Công Nghệ Thông Tin**  
 > **Trường Đại học Công Thương TP. Hồ Chí Minh (HUIT)**  
@@ -14,9 +14,9 @@
 
 - 📷 **Chụp ảnh trực tiếp từ Camera:** Tương thích với các bộ chuyển đổi kính soi đáy mắt cầm tay (Handheld Ophthalmoscope Smartphone Adapter) dùng cho trạm y tế tuyến cơ sở.
 - 🖼️ **Nạp ảnh từ Thư viện & Bộ sưu tập 10 ảnh mẫu:** Tích hợp sẵn 10 mẫu ảnh đáy mắt chuẩn y khoa (Khỏe mạnh, Thoái hóa hoàng điểm AMD, Glaucoma, Cận thị thoái hóa MYA, Tắc tĩnh mạch BRVO, DR Cấp 1–4) để demo trước Hội đồng.
-- 🛡️ **Model A - Input Safety Gate:** Kiểm duyệt ảnh đáy mắt với ngưỡng nghiêm ngặt $\tau = 0.965$. Tự động ngắt luồng xử lý nếu người dùng chụp nhầm ảnh không phải đáy mắt.
-- 👁️ **Model B - DR Staging & XAI Dual Grad-CAM:** Phân loại 5 cấp độ bệnh võng mạc đái tháo đường (ICDR 0–4). Tích hợp trình xem tương tác bản đồ nhiệt Grad-CAM với thanh trượt **Opacity Blend Slider (0% – 100%)** và tính năng **Pinch-to-Zoom** phóng to tổn thương vi mạch.
-- 🩺 **Model C - Retinal Multi-label Screening:** Sàng lọc đồng thời 10 bệnh lý võng mạc với hệ thống ngưỡng xác thực động ($\tau_c$).
+- **Model A trên máy:** ONNX `assets/models/fundus_gate.onnx`, ngưỡng 0.965. Ảnh không phải đáy mắt thì không gọi server.
+- **Model B trên server:** ensemble 6 lớp, ResNet 0.25 và ViT 0.75. App không chạy Model B khi mất mạng.
+- Heatmap và phiếu PDF lấy từ kết quả server. Lớp 5 là nhóm không phải DR.
 - 📄 **Xuất Phiếu Kết Quả PDF Lâm Sàng:** Tự động tạo phiếu báo cáo kết quả A4 chuẩn thể thức HUIT (kèm ảnh gốc, ảnh Grad-CAM và khuyến nghị y khoa) để chia sẻ qua Zalo/Email hoặc in trực tiếp.
 - 💾 **Lịch sử Ca khám Cục bộ:** Quản lý hồ sơ bệnh nhân đã khám ngay trên máy điện thoại.
 
@@ -30,9 +30,9 @@ dr_fundus_mobile/
 │   ├── main.dart                          # Entrypoint & Medical ThemeData
 │   ├── core/
 │   │   ├── constants/
-│   │   │   ├── api_endpoints.dart         # Cấu hình Cloudflare Tunnel URL & Local IP
+│   │   │   ├── api_endpoints.dart         # Máy chủ local mặc định và các preset URL
 │   │   │   ├── app_colors.dart            # Bảng màu y khoa (Navy, Cyan, Emerald, Amber, Red)
-│   │   │   └── clinical_constants.dart    # Từ điển 10 bệnh lý, thang ICDR 0-4, disclaimer
+│   │   │   └── clinical_constants.dart    # Lớp 0-5 và ngưỡng 0.95, 1.35, 2.35, 3.15
 │   │   ├── network/
 │   │   │   └── api_client.dart            # Dio HTTP Client (Multipart upload, ping health check)
 │   │   ├── storage/
@@ -41,9 +41,8 @@ dr_fundus_mobile/
 │   │       └── pdf_report_generator.dart  # Tạo và in ấn phiếu kết quả PDF y khoa
 │   ├── models/
 │   │   ├── prediction_response.dart       # Mapping 1-1 với FastAPI Schema
-│   │   ├── dr_prediction.dart             # Model B (5 giai đoạn & Grad-CAM base64)
-│   │   ├── model_c_prediction.dart        # Model C (10 bệnh lý & ngưỡng tau)
-│   │   ├── sample_image_info.dart         # 10 mẫu ảnh lâm sàng
+│   │   ├── dr_prediction.dart             # Kết quả 6 lớp và Grad-CAM
+│   │   ├── sample_image_info.dart         # Ảnh mẫu lâm sàng
 │   │   └── screening_history_item.dart    # Hồ sơ ca khám lưu trữ
 │   └── features/
 │       ├── diagnosis/
@@ -51,13 +50,12 @@ dr_fundus_mobile/
 │       │   │   └── diagnosis_controller.dart # Riverpod StateNotifier quản lý luồng chẩn đoán
 │       │   ├── views/
 │       │   │   ├── home_dashboard_screen.dart # Trang chủ: Camera, Gallery, 10 Mẫu ảnh
-│       │   │   └── result_screen.dart         # Màn hình kết quả 4 Tab (Overview, DR & XAI, Model C, Disclaimer)
+│       │   │   └── result_screen.dart         # Tổng quan, Model B, giải thích
 │       │   └── widgets/
 │       │       ├── sample_carousel.dart       # Thanh chọn 10 ảnh mẫu kèm lọc danh mục
 │       │       ├── model_a_gate_badge.dart    # Huy hiệu an toàn Model A Gate
-│       │       ├── dr_stage_card.dart         # Thẻ phân độ DR & phân bố xác suất
-│       │       ├── model_c_matrix_table.dart  # Ma trận 10 bệnh lý Model C kèm vạch ngưỡng tau
-│       │       └── dual_gradcam_viewer.dart   # Trình xem Dual Grad-CAM có slider độ trong suốt
+│       │       ├── dr_stage_card.dart         # Thẻ ensemble 6 lớp
+│       │       └── dual_gradcam_viewer.dart   # Heatmap từ server
 │       ├── history/
 │       │   ├── controllers/
 │       │   └── views/history_screen.dart      # Danh sách ca khám cũ & xuất lại PDF
@@ -86,27 +84,21 @@ dr_fundus_mobile/
 ### Bước 2: Cài đặt Thư viện của Dự án
 Di chuyển vào thư mục ứng dụng:
 ```powershell
-cd c:\Users\thanh\Desktop\klcn\dr_fundus_mobile
+cd dr_fundus_mobile
 flutter pub get
 ```
 
 ### Bước 3: Chạy Ứng dụng Thử nghiệm
 
-#### Cách A: Chạy trên Thiết bị Android Thật (Khuyên dùng khi bảo vệ)
-1. Trên điện thoại Android, vào **Cài đặt -> Giới thiệu điện thoại -> Chạm 7 lần vào "Số hiệu bản dựng"** để bật **Tùy chọn nhà phát triển**.
-2. Bật tính năng **Gỡ lỗi qua USB (USB Debugging)**.
-3. Cắm cáp USB nối điện thoại với laptop.
-4. Chạy lệnh:
-   ```powershell
-   flutter run
-   ```
-
-#### Cách B: Chạy trên Môi trường Windows Desktop (Test nhanh trên Laptop)
+#### Cách A: Máy Windows, không cần adb
 ```powershell
 flutter run -d windows
 ```
 
-#### Cách C: Đóng gói file APK Release để cài lên nhiều điện thoại
+#### Cách B: Điện thoại Android khi máy đã có adb
+Bật gỡ lỗi USB, cắm cáp, rồi `flutter run`. Máy không có adb thì cài file APK build ở máy khác.
+
+#### Cách C: Đóng gói file APK
 ```powershell
 flutter build apk --release
 ```
@@ -118,16 +110,13 @@ Bạn có thể copy file này sang điện thoại của Thầy/Cô hoặc bạ
 
 ## 🌐 4. Cơ chế Kết nối Mạng với Backend AI
 
-Ứng dụng mobile được trang bị màn hình **Cài đặt Máy chủ (Server Settings)** thông minh:
+Màn hình **Cài đặt máy chủ** chọn nơi gửi ảnh cho Model B. Mặc định là `http://127.0.0.1:8000`, tức backend local đang nạp ensemble 6 lớp. Model B không chạy trên điện thoại.
 
-1. **Chế độ Mặc định (Cloudflare Tunnel - Toàn cầu):**  
-   - URL: `https://followed-position-wisconsin-diesel.trycloudflare.com`  
-   - **Ưu điểm:** Điện thoại chỉ cần bật 4G hoặc Wi-Fi bất kỳ là có thể gửi ảnh về laptop đang chạy backend.
-2. **Chế độ Mạng Cục bộ (LAN IP):**  
-   - Khi điện thoại và laptop cùng bắt chung mạng Wi-Fi phòng bảo vệ, bạn có thể nhập địa chỉ IP LAN của máy tính (ví dụ: `http://192.168.1.175:8000`).
-   - Nhấn nút **"Kiểm tra kết nối"** để kiểm tra thời gian phản hồi (Ping latency ~50ms).
-3. **Chế độ Máy ảo Android Emulator:**  
-   - Sử dụng địa chỉ bridge `http://10.0.2.2:8000`.
+1. **Localhost:** app Windows nói chuyện với backend trên cùng máy.
+2. **LAN:** điện thoại và máy tính cùng Wi-Fi thì nhập IP của máy tính, ví dụ `http://192.168.1.175:8000`, rồi bấm kiểm tra kết nối.
+3. **Android Emulator:** dùng `http://10.0.2.2:8000`.
+
+Hugging Face Space và tunnel Cloudflare cũ không phục vụ bộ trọng số này. Space và demo Gradio trong repo không được cập nhật.
 
 ---
 
@@ -135,7 +124,7 @@ Bạn có thể copy file này sang điện thoại của Thầy/Cô hoặc bạ
 
 Chạy kiểm thử độ tương thích giữa Data Models Dart và FastAPI schemas:
 ```powershell
-cd c:\Users\thanh\Desktop\klcn\dr_fundus_mobile
+cd dr_fundus_mobile
 flutter test
 ```
 Bộ test kiểm tra:

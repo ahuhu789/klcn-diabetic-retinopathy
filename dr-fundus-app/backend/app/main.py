@@ -6,14 +6,14 @@ from fastapi.responses import FileResponse
 from PIL import Image
 
 from typing import List, Optional, Dict, Any
-from app.schemas import PredictionResponse, DRPrediction, ModelCPrediction, SampleImageInfo
+from app.schemas import PredictionResponse, DRPrediction, SampleImageInfo
 from app.gate import FundusGate
 from app.classifier import DRClassifier
 
 app = FastAPI(
     title="Fundus Gate & Diabetic Retinopathy API",
-    description="2-Stage Pipeline: Input Validation Gate (MobileNetV3) + DR Severity Staging (ResNet-50 + Grad-CAM)",
-    version="1.0.0"
+    description="Model A fundus gate plus a 6-class ResNet-50 / ViT-B/16 ensemble",
+    version="2.0.0"
 )
 
 # CORS configuration
@@ -32,7 +32,6 @@ SAMPLES_DIR = os.path.join(BASE_DIR, "samples")
 # Global model singletons with thread-safe / lazy loading
 gate = None
 classifier = None
-model_c = None
 
 def get_gate():
     global gate
@@ -44,41 +43,31 @@ def get_gate():
 def get_classifier():
     global classifier
     if classifier is None:
-        print("Initializing DR Severity Classifier (Model B)...", flush=True)
+        print("Initializing 6-class DR ensemble (Model B)...", flush=True)
         classifier = DRClassifier()
     return classifier
-
-def get_model_c():
-    global model_c
-    if model_c is None:
-        print("Initializing Multi-Source Retinal Multi-Label Classifier (Model C)...", flush=True)
-        try:
-            from app.model_c_adapter import ModelCAdapter
-            model_c = ModelCAdapter()
-            print("Model C initialized successfully!", flush=True)
-        except Exception as e:
-            print(f"Warning: Model C could not be initialized: {e}", flush=True)
-            model_c = None
-    return model_c
 
 @app.on_event("startup")
 def startup_event():
     print("Pre-loading models on application startup...", flush=True)
     get_gate()
     get_classifier()
-    get_model_c()
-    print("All models ready for inference!", flush=True)
+    print("Startup finished.", flush=True)
 
 @app.get("/api/health")
 def health_check():
     g = get_gate()
     c = get_classifier()
-    mc = get_model_c()
+    ready = bool(c is not None and c.ready)
     return {
-        "status": "healthy",
+        "status": "healthy" if ready else "degraded",
         "gate_loaded": g is not None,
-        "classifier_loaded": c is not None,
-        "model_c_loaded": mc is not None,
+        "classifier_loaded": ready,
+        "num_classes": 6,
+        "ensemble_resnet_weight": c.resnet_weight if c else None,
+        "ensemble_vit_weight": c.vit_weight if c else None,
+        "ordinal_thresholds": c.thresholds if c else None,
+        "classifier_error": None if ready else (c.load_error if c else "classifier unavailable"),
         "gate_threshold": g.threshold if g else 0.965
     }
 
@@ -256,13 +245,10 @@ async def predict_image(file: UploadFile = File(...)):
     # Retrieve model singletons via lazy/cached accessors
     gate_inst = get_gate()
     classifier_inst = get_classifier()
-    model_c_inst = get_model_c()
 
-    # Status tracking for models
     current_status = {
         "model_a": "ready" if gate_inst is not None else "unavailable",
-        "model_b": "ready" if classifier_inst is not None else "unavailable",
-        "model_c": "ready" if model_c_inst is not None else "unavailable"
+        "model_b": "ready" if (classifier_inst is not None and classifier_inst.ready) else "unavailable",
     }
 
     # Giai doan 1: Fundus Gate (Model A: MobileNetV3)
@@ -297,49 +283,41 @@ async def predict_image(file: UploadFile = File(...)):
                 fundus_conf * 100, gate_inst.threshold * 100
             ),
             dr_result=None,
-            model_c_result=None,
             clinical_disclaimer=official_disclaimer
         )
 
-    # Giai doan 2: DR Classifier (Model B: ResNet-50 & ViT-B/16)
     dr_data = None
     dr_err = None
-    if classifier_inst is not None:
+    if classifier_inst is not None and classifier_inst.ready:
         try:
             dr_data = classifier_inst.predict(image)
-        except Exception as e:
-            dr_err = "Không thể hoàn tất phân độ DR (Model B): Đã xảy ra sự cố nội bộ trong quá trình suy luận."
+        except Exception as exc:
+            dr_err = f"Không thể hoàn tất phân loại 6 lớp (Model B): {exc}"
     else:
-        dr_err = "Mô hình phân độ DR (Model B) chưa được nạp hoặc không khả dụng."
-
-    # Giai doan 3: Multi-Label Retinal Classifier (Model C: E2 Harmonized)
-    model_c_data = None
-    model_c_err = None
-    if model_c_inst is not None:
-        try:
-            model_c_data = model_c_inst.predict(image)
-        except Exception as e:
-            model_c_err = "Không thể hoàn tất sàng lọc đa bệnh lý võng mạc (Model C): Sự cố nội bộ trong quá trình suy luận."
-    else:
-        model_c_err = "Mô hình sàng lọc đa bệnh lý võng mạc (Model C) chưa được nạp hoặc không khả dụng."
+        detail = classifier_inst.load_error if classifier_inst is not None else ""
+        dr_err = detail or "Mô hình 6 lớp (Model B) chưa được nạp."
 
     total_elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
     return PredictionResponse(
         is_fundus=True,
         fundus_confidence=round(fundus_conf, 4),
-        threshold=gate.threshold,
+        threshold=gate_inst.threshold,
         processing_time_ms=total_elapsed_ms,
         model_status=current_status,
-        message="Ảnh đạt chuẩn đáy mắt ({:.2f}%). Đã hoàn tất phân độ DR (Model B) và sàng lọc đa bệnh lý võng mạc (Model C).".format(
-            fundus_conf * 100
+        message=(
+            "Ảnh đạt chuẩn đáy mắt ({:.2f}%). Đã chạy ensemble 6 lớp ResNet 0.25 / ViT 0.75.".format(
+                fundus_conf * 100
+            )
+            if dr_data
+            else "Ảnh đạt chuẩn đáy mắt ({:.2f}%), nhưng Model B không trả được kết quả. {}".format(
+                fundus_conf * 100, dr_err or ""
+            )
         ),
         dr_resnet=DRPrediction(**dr_data["dr_resnet"]) if (dr_data and dr_data.get("dr_resnet")) else None,
         dr_vit=DRPrediction(**dr_data["dr_vit"]) if (dr_data and dr_data.get("dr_vit")) else None,
         dr_result=DRPrediction(**dr_data["dr_result"]) if (dr_data and dr_data.get("dr_result")) else None,
         dr_error=dr_err,
-        model_c_result=ModelCPrediction(**model_c_data) if model_c_data else None,
-        model_c_error=model_c_err,
         clinical_disclaimer=official_disclaimer
     )
 

@@ -242,33 +242,22 @@ class PdfReportGenerator {
               pw.SizedBox(height: 10),
             ],
 
-            // Section 4: Model C Multi-label Matrix
-            if (result.modelCResult != null) ...[
-              pw.Text('4. KẾT QUẢ SÀNG LỌC ĐA BỆNH LÝ VÕNG MẠC (MODEL C):',
+            if (result.drResult != null) ...[
+              pw.Text('4. XÁC SUẤT 6 LỚP CỦA ENSEMBLE:',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               pw.SizedBox(height: 4),
               pw.TableHelper.fromTextArray(
-                headers: ['Mã bệnh', 'Tên bệnh lý', 'Xác suất', 'Ngưỡng phát hiện', 'Trạng thái'],
+                headers: ['Lớp', 'Xác suất'],
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
                 cellStyle: const pw.TextStyle(fontSize: 8),
-                cellHeight: 18,
-                data: result.modelCResult!.fullProbabilities.entries.map((entry) {
-                  final k = entry.key;
-                  final v = entry.value as Map<String, dynamic>;
-                  final name = v['name'] ?? k;
-                  final prob = ((v['probability'] as num?)?.toDouble() ?? 0.0) * 100;
-                  final thresh = ((v['threshold'] as num?)?.toDouble() ?? 0.5) * 100;
-                  final isDetected = v['detected'] == true;
-                  return [
-                    k,
-                    name,
-                    '${prob.toStringAsFixed(1)}%',
-                    '${thresh.toStringAsFixed(1)}%',
-                    isDetected ? 'DƯƠNG TÍNH' : 'Âm tính',
-                  ];
+                cellHeight: 16,
+                data: result.drResult!.probabilities.entries.map((entry) {
+                  return [entry.key, '${(entry.value * 100).toStringAsFixed(1)}%'];
                 }).toList(),
               ),
+              pw.SizedBox(height: 6),
+              pw.Text(result.drResult!.benchmarkNote, style: const pw.TextStyle(fontSize: 8)),
               pw.SizedBox(height: 10),
             ],
 

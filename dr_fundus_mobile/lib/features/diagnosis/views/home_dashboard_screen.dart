@@ -167,7 +167,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Kiểm duyệt ảnh Model A (τ=0.965) • Phân độ Model B (ViT-B/16 & ResNet-50) • Sàng lọc Model C (10 Bệnh lý võng mạc).',
+                    'Model A trên máy (τ=0.965) • Model B trên server: ensemble 6 lớp, ResNet 0.25 và ViT 0.75.',
                     style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
                   ),
                 ],

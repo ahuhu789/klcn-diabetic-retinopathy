@@ -46,6 +46,8 @@ class AppColors {
         return danger;                 // Red
       case 4:
         return const Color(0xFFB91C1C); // Dark Red
+      case 5:
+        return const Color(0xFF475569);
       default:
         return textSecondary;
     }

@@ -103,37 +103,37 @@ class _ServerSettingsScreenState extends ConsumerState<ServerSettingsScreen> {
             const SizedBox(height: 8),
 
             _buildPresetButton(
-              title: '1. Hugging Face Cloud 24/7 (Khuyên dùng - Không phụ thuộc máy nhà)',
-              desc: 'Serverless Cloud toàn cầu chạy ViT-B/16 & ResNet-50 24/7 độc lập',
-              url: ApiEndpoints.hfCloudUrl,
+              title: '1. Windows / Localhost (mặc định)',
+              desc: 'Backend local chạy ensemble 6 lớp: 127.0.0.1:8000',
+              url: ApiEndpoints.localhostUrl,
             ),
             const SizedBox(height: 8),
 
             _buildPresetButton(
-              title: '2. Cloudflare Tunnel (Máy tính cá nhân)',
-              desc: 'Truy cập backend PC qua Cloudflare Tunnel công khai',
-              url: ApiEndpoints.defaultCloudflareUrl,
-            ),
-            const SizedBox(height: 8),
-
-            _buildPresetButton(
-              title: '3. Mạng nội bộ Wi-Fi (LAN)',
-              desc: 'Điện thoại & Máy tính cùng kết nối Wi-Fi: 192.168.1.175:8000',
+              title: '2. Mạng nội bộ Wi-Fi (LAN)',
+              desc: 'Điện thoại và máy tính cùng Wi-Fi. Sửa IP cho đúng máy chủ.',
               url: ApiEndpoints.wifiLanUrl,
             ),
             const SizedBox(height: 8),
 
             _buildPresetButton(
-              title: '4. Android Emulator (Máy ảo Android)',
-              desc: 'Kết nối localhost máy tính qua cổng bridge: 10.0.2.2:8000',
+              title: '3. Android Emulator',
+              desc: 'Cổng bridge tới localhost của máy tính: 10.0.2.2:8000',
               url: ApiEndpoints.emulatorUrl,
             ),
             const SizedBox(height: 8),
 
             _buildPresetButton(
-              title: '5. Windows Desktop / Localhost',
-              desc: 'Chạy trực tiếp trên máy tính cá nhân: 127.0.0.1:8000',
-              url: ApiEndpoints.localhostUrl,
+              title: '4. Hugging Face Space cũ',
+              desc: 'Space này chưa được cập nhật ensemble 6 lớp. Không dùng cho bản này.',
+              url: ApiEndpoints.hfCloudUrl,
+            ),
+            const SizedBox(height: 8),
+
+            _buildPresetButton(
+              title: '5. Cloudflare Tunnel cũ',
+              desc: 'URL mẫu đã hết hạn. Dán tunnel mới vào ô bên dưới nếu bạn tự mở.',
+              url: ApiEndpoints.defaultCloudflareUrl,
             ),
             const SizedBox(height: 20),
 
@@ -209,12 +209,11 @@ class _ServerSettingsScreenState extends ConsumerState<ServerSettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Thông tin hệ sinh thái 3 Mô hình AI:',
+                  const Text('Hai mô hình đang dùng:',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(height: 6),
-                  _buildModelStatusRow('Model A - MobileNetV3 Gate:', 'Ngưỡng an toàn τ = 0.965'),
-                  _buildModelStatusRow('Model B - ViT & ResNet Hybrid:', '5 Cấp độ DR & Dual Grad-CAM'),
-                  _buildModelStatusRow('Model C - EfficientNet-B0 E2:', 'Sàng lọc đa nhãn 10 bệnh lý võng mạc'),
+                  _buildModelStatusRow('Model A - MobileNetV3 Gate:', 'Ngưỡng an toàn τ = 0.965, chạy trên máy'),
+                  _buildModelStatusRow('Model B - Ensemble 6 lớp:', 'ResNet 0.25 / ViT 0.75, chạy trên server'),
                 ],
               ),
             ),

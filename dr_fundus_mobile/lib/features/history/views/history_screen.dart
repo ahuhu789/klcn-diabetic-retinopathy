@@ -125,7 +125,7 @@ class HistoryScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 6),
 
-                        // Row 2: Model A & Model B & Model C Status Pills
+                        // Row 2: Gate and ensemble stage
                         Wrap(
                           spacing: 6,
                           runSpacing: 4,
@@ -156,7 +156,9 @@ class HistoryScreen extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  'DR Cấp ${dr.stage} (${(dr.confidence * 100).toStringAsFixed(0)}%)',
+                                  dr.stage == 5
+                                      ? 'Lớp 5 (${(dr.confidence * 100).toStringAsFixed(0)}%)'
+                                      : 'DR cấp ${dr.stage} (${(dr.confidence * 100).toStringAsFixed(0)}%)',
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
@@ -165,29 +167,7 @@ class HistoryScreen extends ConsumerWidget {
                                 ),
                               ),
 
-                            // Model C Risk Pill
-                            if (res.modelCResult != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: res.modelCResult!.overallDiseaseRisk
-                                      ? AppColors.dangerLight
-                                      : AppColors.successLight,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  res.modelCResult!.overallDiseaseRisk
-                                      ? 'Phát hiện ${res.modelCResult!.numDetectedConditions} bệnh'
-                                      : 'Võng mạc bình thường',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: res.modelCResult!.overallDiseaseRisk
-                                        ? AppColors.danger
-                                        : AppColors.success,
-                                  ),
-                                ),
-                              ),
+
                           ],
                         ),
                         const SizedBox(height: 8),

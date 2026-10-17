@@ -1,9 +1,9 @@
 class ApiEndpoints {
-  // Hugging Face Cloud 24/7 Serverless (Toàn cầu, không phụ thuộc máy tính ở nhà)
+  // Space cũ, vẫn phục vụ bộ trọng số 5 lớp. Bản này không gọi mặc định.
   static const String hfCloudUrl =
       'https://slyviee-klcn-diabetic-retinopathy.hf.space';
 
-  // Cloudflare Tunnel dự phòng
+  // Tunnel cũ đã hết hạn. Chỉ dùng khi tự mở tunnel mới và dán URL đó.
   static const String defaultCloudflareUrl =
       'https://followed-position-wisconsin-diesel.trycloudflare.com';
 

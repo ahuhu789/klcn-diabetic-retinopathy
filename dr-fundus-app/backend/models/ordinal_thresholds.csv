@@ -1,5 +1,5 @@
-threshold_index,threshold
-1,0.95
-2,1.6759259259259256
-3,2.05
-4,3.25
+threshold_index,threshold,tuned_on,adopted
+1,0.95,val_SCORE,True
+2,1.35,val_SCORE,True
+3,2.35,val_SCORE,True
+4,3.15,val_SCORE,True

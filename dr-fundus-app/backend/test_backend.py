@@ -26,7 +26,13 @@ if sample_files:
 
 print("--- 2. Testing DRClassifier ---")
 classifier = DRClassifier()
+assert classifier.ready, classifier.load_error
 res = classifier.predict(img)
-print(f"DR Diagnosis Result: Stage {res['stage']} ({res['badge']}), Confidence={res['confidence']:.4f}")
-print(f"Heatmap base64 length: {len(res['heatmap_base64'])}")
+primary = res["dr_result"]
+print(f"Ensemble stage {primary['stage']} ({primary['badge']}), confidence={primary['confidence']:.4f}")
+print(f"Classes: {len(primary['probabilities'])}")
+assert primary["stage"] in range(6)
+assert len(primary["probabilities"]) == 6
+assert res["dr_resnet"]["heatmap_base64"].startswith("data:image/jpeg;base64,")
+assert res["dr_vit"]["heatmap_base64"].startswith("data:image/jpeg;base64,")
 print("All backend tests PASSED successfully!")

@@ -20,6 +20,8 @@ wheels/
 .installed.cfg
 *.egg
 
+node_modules/
+
 # Virtualenv
 .env
 .venv
@@ -29,7 +31,9 @@ ENV/
 env.bak/
 venv.bak/
 
-# Large Model Weights (hosted on Hugging Face Model Hub slyviee/klcn-vit-b16-dr)
+# Large Model B weights. ViT-B/16 is about 330MB and cannot be committed.
+# Place resnet50_hybrid_ordinal_best_score.pth and
+# vit_b16_hybrid_ordinal_best_score.pth in dr-fundus-app/backend/models/.
 *.pth
 *.pt
 *.bin

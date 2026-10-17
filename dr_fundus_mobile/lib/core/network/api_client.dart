@@ -8,7 +8,7 @@ import '../../models/sample_image_info.dart';
 
 class ApiClient {
   late Dio _dio;
-  String _baseUrl = ApiEndpoints.hfCloudUrl;
+  String _baseUrl = ApiEndpoints.localhostUrl;
 
   ApiClient({String? baseUrl}) {
     if (baseUrl != null && baseUrl.isNotEmpty) {

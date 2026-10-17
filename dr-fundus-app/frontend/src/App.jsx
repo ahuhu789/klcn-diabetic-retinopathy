@@ -16,42 +16,20 @@ import {
   RefreshCw,
   FileText,
   AlertCircle,
-  Check,
   HelpCircle,
-  BarChart3,
-  Stethoscope
+  BarChart3
 } from 'lucide-react';
 
 const API_BASE = '/api';
 
 const STAGE_COLORS = [
-  '#10b981', // 0: Normal (Green)
-  '#f59e0b', // 1: Mild (Yellow/Amber)
-  '#f97316', // 2: Moderate (Orange)
-  '#ef4444', // 3: Severe (Red)
-  '#a855f7'  // 4: Proliferative (Purple)
+  '#10b981',
+  '#f59e0b',
+  '#f97316',
+  '#ef4444',
+  '#a855f7',
+  '#64748b'
 ];
-
-const STAGE_VIETNAMESE = {
-  0: 'Không có bệnh võng mạc (No DR)',
-  1: 'Bệnh võng mạc tiểu đường nhẹ (Mild NPDR)',
-  2: 'Bệnh võng mạc tiểu đường trung bình (Moderate NPDR)',
-  3: 'Bệnh võng mạc tiểu đường nặng (Severe NPDR)',
-  4: 'Bệnh võng mạc tiểu đường tăng sinh (Proliferative DR)'
-};
-
-const DISEASE_LABELS = {
-  'DR': { vi: 'Bệnh võng mạc đái tháo đường', en: 'Diabetic Retinopathy', tag: 'Mạch máu' },
-  'ARMD': { vi: 'Thoái hóa hoàng điểm do tuổi tác', en: 'Age-related Macular Degeneration', tag: 'Hoàng điểm' },
-  'MYA': { vi: 'Cận thị thoái hóa võng mạc', en: 'Pathological Myopia', tag: 'Khúc xạ' },
-  'DN': { vi: 'Lắng đọng Drusen', en: 'Drusen', tag: 'Lắng đọng' },
-  'ERM': { vi: 'Màng trước võng mạc', en: 'Epiretinal Membrane', tag: 'Co kéo' },
-  'BRVO': { vi: 'Tắc nhánh tĩnh mạch võng mạc', en: 'Branch Retinal Vein Occlusion', tag: 'Tắc mạch' },
-  'LS': { vi: 'Sẹo quang đông Laser', en: 'Laser Scars', tag: 'Điều trị' },
-  'ODC_GLAUCOMA': { vi: 'Lõm gai thị / Biến đổi glôcôm', en: 'Optic Disc Cupping / Glaucoma', tag: 'Gai thị' },
-  'CRVO': { vi: 'Tắc tĩnh mạch trung tâm võng mạc', en: 'Central Retinal Vein Occlusion', tag: 'Tắc mạch' },
-  'RISK': { vi: 'Tín hiệu phát hiện tổn thương tổng quát', en: 'General Disease Risk', tag: 'Sàng lọc' }
-};
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -64,9 +42,9 @@ export default function App() {
   const [activeSampleInfo, setActiveSampleInfo] = useState(null);
   
   // Dashboard Navigation Tabs
-  const [dashboardTab, setDashboardTab] = useState('overview'); // 'overview', 'model_b', 'model_c', 'explanation'
-  const [activeHeatmapView, setActiveHeatmapView] = useState('compare'); // 'compare', 'vit', 'resnet', 'original'
-  const [selectedDRModel, setSelectedDRModel] = useState('vit'); // 'vit' or 'resnet'
+  const [dashboardTab, setDashboardTab] = useState('overview');
+  const [activeHeatmapView, setActiveHeatmapView] = useState('compare');
+  const [selectedDRModel, setSelectedDRModel] = useState('ensemble');
   const fileInputRef = useRef(null);
 
   // Load sample images on mount
@@ -144,8 +122,9 @@ export default function App() {
       const data = await response.json();
       setResult(data);
       
-      // Auto-select best model for Model B
-      if (data.dr_vit) {
+      if (data.dr_result) {
+        setSelectedDRModel('ensemble');
+      } else if (data.dr_vit) {
         setSelectedDRModel('vit');
       } else {
         setSelectedDRModel('resnet');
@@ -158,9 +137,11 @@ export default function App() {
     }
   };
 
-  const currentDR = (selectedDRModel === 'vit' && result?.dr_vit) 
-    ? result.dr_vit 
-    : (result?.dr_resnet || result?.dr_result);
+  const currentDR = selectedDRModel === 'resnet' && result?.dr_resnet
+    ? result.dr_resnet
+    : selectedDRModel === 'vit' && result?.dr_vit
+    ? result.dr_vit
+    : (result?.dr_result || result?.dr_vit || result?.dr_resnet);
 
   const isAgreement = result?.dr_resnet && result?.dr_vit && (result.dr_resnet.stage === result.dr_vit.stage);
 
@@ -175,7 +156,7 @@ export default function App() {
             </div>
             <div>
               <div className="brand-title">RetinaGuard AI</div>
-              <div className="brand-subtitle">Hệ thống Phân tích Đáy mắt & Sàng lọc Đa bệnh lý Võng mạc</div>
+              <div className="brand-subtitle">Cổng ảnh đáy mắt và phân loại 6 lớp</div>
             </div>
           </div>
           
@@ -186,11 +167,7 @@ export default function App() {
             </div>
             <div className="badge-pipeline badge-b">
               <Activity size={14} />
-              <span>Model B: DR Severity (ViT & ResNet)</span>
-            </div>
-            <div className="badge-pipeline badge-c">
-              <Stethoscope size={14} />
-              <span>Model C: Multi-Label (E2 Harmonized)</span>
+              <span>Model B: Ensemble 6 lớp (0.25 / 0.75)</span>
             </div>
           </div>
         </div>
@@ -200,9 +177,9 @@ export default function App() {
       <section className="hero">
         <div className="container">
           <div className="hero-tag">Khóa Luận Tốt Nghiệp Đại Học • Hệ Thống AI Y Tế</div>
-          <h1>Nghiên cứu Vision Transformer và Sàng lọc <span>Đa Bệnh lý Võng mạc</span></h1>
+          <h1>Nghiên cứu Vision Transformer và phân loại <span>6 lớp ảnh đáy mắt</span></h1>
           <p>
-            Hệ thống tích hợp quy trình 3 giai đoạn độc lập: Xác thực ảnh đáy mắt hợp lệ qua <strong>Model A (Fundus Gate)</strong>, phân độ mức độ tổn thương võng mạc tiểu đường qua <strong>Model B (ViT-B/16 & ResNet-50)</strong> kết hợp XAI Heatmaps, và sàng lọc đồng mắc 10 nhóm bệnh lý võng mạc qua <strong>Model C (EfficientNet-B0 E2)</strong>.
+            Ảnh đi qua <strong>Model A (Fundus Gate, τ = 0.965)</strong> trên ảnh gốc. Nếu hợp lệ, <strong>Model B</strong> áp Ben Graham 256 rồi ensemble ResNet-50 (0.25) và ViT-B/16 (0.75). Lớp 0–4 là thang DR. Lớp 5 là nhóm tổn thương không phải DR, không phải tên một bệnh.
           </p>
         </div>
       </section>
@@ -401,12 +378,12 @@ export default function App() {
                 </div>
                 <h4>Hệ thống sẵn sàng tiếp nhận ảnh</h4>
                 <p>
-                  Vui lòng tải ảnh lên hoặc chọn ảnh mẫu bên trái, sau đó nhấn nút <strong>"Phân tích Toàn diện"</strong> để khởi chạy đồng thời cả 3 mô hình AI.
+                  Vui lòng tải ảnh lên hoặc chọn ảnh mẫu bên trái, sau đó nhấn nút <strong>"Phân tích Toàn diện"</strong>.
                 </p>
                 <div className="empty-feature-list">
                   <div className="feature-item">✓ Model A kiểm tra ảnh đáy mắt hợp lệ</div>
-                  <div className="feature-item">✓ Model B phân độ 5 cấp DR & sinh Heatmap</div>
-                  <div className="feature-item">✓ Model C sàng lọc 10 bệnh lý võng mạc</div>
+                  <div className="feature-item">✓ Model B phân loại 6 lớp sau tiền xử lý Ben Graham</div>
+                  <div className="feature-item">✓ Kết quả báo cáo là ensemble 0.25 ResNet + 0.75 ViT</div>
                 </div>
               </div>
             )}
@@ -417,11 +394,10 @@ export default function App() {
                 <div className="loading-spinner-box">
                   <div className="spinner-large"></div>
                 </div>
-                <h4>Đang tiến hành chẩn đoán đa mô hình...</h4>
+                <h4>Đang phân tích ảnh...</h4>
                 <p className="loading-step">
-                  Giai đoạn 1: MobileNetV3 Fundus Gate kiểm định chất lượng quang học...<br />
-                  Giai đoạn 2: ResNet-50 & ViT-B/16 trích xuất tổn thương vi phình mạch...<br />
-                  Giai đoạn 3: EfficientNet-B0 E2 quét 10 nhóm bệnh lý võng mạc đồng mắc...
+                  Giai đoạn 1: MobileNetV3 kiểm tra ảnh đáy mắt trên ảnh gốc...<br />
+                  Giai đoạn 2: Ben Graham 256, rồi ResNet-50 và ViT-B/16, rồi ensemble...
                 </p>
               </div>
             )}
@@ -457,7 +433,7 @@ export default function App() {
                       <span>Pipeline tự động dừng: Bảo vệ an toàn chẩn đoán y khoa</span>
                     </div>
                     <p className="rejection-p">
-                      Hệ thống tuân thủ nghiêm ngặt nguyên tắc lâm sàng: Khi ảnh đầu vào không đạt tiêu chuẩn chụp đáy võng mạc, <strong>Model B và Model C sẽ không được kích hoạt</strong> nhằm ngăn chặn tuyệt đối hiện tượng chẩn đoán sai lệch (false positives).
+                      Khi ảnh không đạt chuẩn đáy võng mạc, <strong>Model B không được chạy</strong>.
                     </p>
                     <button className="btn-re-upload" onClick={() => fileInputRef.current?.click()}>
                       Tải lên ảnh chụp đáy võng mạc hợp lệ khác
@@ -482,14 +458,7 @@ export default function App() {
                         onClick={() => setDashboardTab('model_b')}
                       >
                         <Activity size={15} />
-                        <span>Model B: Phân độ DR & XAI</span>
-                      </button>
-                      <button 
-                        className={`dash-tab ${dashboardTab === 'model_c' ? 'active' : ''}`}
-                        onClick={() => setDashboardTab('model_c')}
-                      >
-                        <Stethoscope size={15} />
-                        <span>Model C: Sàng lọc Đa bệnh lý</span>
+                        <span>Model B: 6 lớp & XAI</span>
                       </button>
                       <button 
                         className={`dash-tab ${dashboardTab === 'explanation' ? 'active' : ''}`}
@@ -507,20 +476,20 @@ export default function App() {
                           {/* Card 1: DR Staging (Model B) */}
                           <div className="summary-card model-b-summary">
                             <div className="summary-header">
-                              <span className="summary-tag tag-b">Model B • DR Staging</span>
-                              {currentDR && (
-                                <span className={`stage-badge stage-${currentDR.stage}`}>
-                                  {currentDR.badge}
+                              <span className="summary-tag tag-b">Kết quả báo cáo • Ensemble</span>
+                              {result.dr_result && (
+                                <span className={`stage-badge stage-${result.dr_result.stage}`}>
+                                  {result.dr_result.badge}
                                 </span>
                               )}
                             </div>
-                            {currentDR ? (
+                            {result.dr_result ? (
                               <div className="summary-body">
-                                <h3 className="summary-title">{currentDR.stage_name}</h3>
-                                <p className="summary-desc">{currentDR.description}</p>
+                                <h3 className="summary-title">{result.dr_result.stage_name}</h3>
+                                <p className="summary-desc">{result.dr_result.description}</p>
                                 <div className="summary-confidence">
-                                  <span>Độ tự tin phân loại ({currentDR.model_used}):</span>
-                                  <strong>{(currentDR.confidence * 100).toFixed(1)}%</strong>
+                                  <span>Xác suất lớp được chọn:</span>
+                                  <strong>{(result.dr_result.confidence * 100).toFixed(1)}%</strong>
                                 </div>
                               </div>
                             ) : (
@@ -529,51 +498,30 @@ export default function App() {
                               </div>
                             )}
                             <button className="btn-card-link" onClick={() => setDashboardTab('model_b')}>
-                              <span>Xem biểu đồ & Heatmap XAI</span>
+                              <span>Xem 6 lớp và heatmap</span>
                               <ChevronRight size={14} />
                             </button>
                           </div>
 
-                          {/* Card 2: Multi-Label Screening (Model C) */}
-                          <div className="summary-card model-c-summary">
+                          <div className="summary-card model-b-summary">
                             <div className="summary-header">
-                              <span className="summary-tag tag-c">Model C • Multi-Label</span>
-                              {result.model_c_result && (
-                                <span className={`risk-pill ${result.model_c_result.overall_disease_risk ? 'risk-active' : 'risk-normal'}`}>
-                                  {result.model_c_result.overall_disease_risk ? 'Cảnh báo Bệnh võng mạc' : 'Võng mạc Bình thường'}
-                                </span>
+                              <span className="summary-tag tag-b">Hai nhánh trước khi trộn</span>
+                            </div>
+                            <div className="summary-body">
+                              <h3 className="summary-title">ResNet 0.25 và ViT 0.75</h3>
+                              <p className="summary-desc">
+                                ResNet-50: {result.dr_resnet ? result.dr_resnet.badge : "chưa có"}.
+                                {" "}ViT-B/16: {result.dr_vit ? result.dr_vit.badge : "chưa có"}.
+                                {" "}Lớp 5 chỉ có nghĩa là nhóm không phải DR.
+                              </p>
+                              {result.dr_result && (
+                                <div className="summary-confidence">
+                                  <span>{result.dr_result.benchmark_note}</span>
+                                </div>
                               )}
                             </div>
-                            {result.model_c_result ? (
-                              <div className="summary-body">
-                                <h3 className="summary-title">
-                                  {result.model_c_result.overall_disease_risk 
-                                    ? `Phát hiện ${result.model_c_result.num_detected_conditions} nhóm dấu hiệu bệnh lý`
-                                    : 'Không phát hiện bất thường ngoài vùng an toàn'
-                                  }
-                                </h3>
-                                {result.model_c_result.detected_diseases.length > 0 ? (
-                                  <div className="detected-chips-wrap">
-                                    {result.model_c_result.detected_diseases.map(d => (
-                                      <span key={d.code} className="detected-chip">
-                                        <strong>{d.code}</strong>: {d.name} ({d.confidence_pct}%)
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="summary-desc">Các bệnh lý như thoái hóa hoàng điểm (ARMD), cận thị thoái hóa (MYA), drusen (DN) đều nằm dưới ngưỡng cảnh báo.</p>
-                                )}
-                                <div className="summary-confidence">
-                                  <span>Mô hình: {result.model_c_result.model_name}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="summary-error">
-                                {result.model_c_error || "Mô hình Model C không khả dụng"}
-                              </div>
-                            )}
-                            <button className="btn-card-link" onClick={() => setDashboardTab('model_c')}>
-                              <span>Xem 10 nhóm bệnh lý & Ngưỡng cắt</span>
+                            <button className="btn-card-link" onClick={() => setDashboardTab('model_b')}>
+                              <span>Đối chiếu từng nhánh</span>
                               <ChevronRight size={14} />
                             </button>
                           </div>
@@ -583,20 +531,16 @@ export default function App() {
                         <div className="system-status-box">
                           <div className="status-box-title">
                             <ShieldCheck size={16} />
-                            <span>Trạng thái Hoạt động của 3 Mô hình Độc lập</span>
+                            <span>Trạng thái hai mô hình</span>
                           </div>
                           <div className="status-grid">
                             <div className="status-col">
                               <span className="col-label">Model A (Fundus Gate):</span>
-                              <span className="col-val val-green">✓ Hoạt động ({result.model_status?.model_a || 'ready'})</span>
+                              <span className="col-val val-green">✓ {result.model_status?.model_a || 'ready'}</span>
                             </div>
                             <div className="status-col">
-                              <span className="col-label">Model B (DR Classifier):</span>
-                              <span className="col-val val-green">✓ Hoạt động ({result.model_status?.model_b || 'ready'})</span>
-                            </div>
-                            <div className="status-col">
-                              <span className="col-label">Model C (Retinal Multi-Label):</span>
-                              <span className="col-val val-green">✓ Hoạt động ({result.model_status?.model_c || 'ready'})</span>
+                              <span className="col-label">Model B (ensemble 6 lớp):</span>
+                              <span className="col-val val-green">✓ {result.model_status?.model_b || 'ready'}</span>
                             </div>
                           </div>
                         </div>
@@ -613,15 +557,14 @@ export default function App() {
                               <div className={`agreement-banner ${isAgreement ? 'agree-yes' : 'agree-diff'}`}>
                                 {isAgreement ? <CheckCircle2 size={18} className="flex-shrink-0" /> : <AlertTriangle size={18} className="flex-shrink-0" />}
                                 <div>
-                                  {isAgreement ? (
-                                    <div>
-                                      <strong>Đồng thuận Song Kiến trúc:</strong> Cả ResNet-50 (CNN) và ViT-B/16 (Transformer) đều chẩn đoán đồng nhất ở <strong>Độ {result.dr_resnet.stage} ({result.dr_resnet.badge})</strong>.
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <strong>Chẩn đoán Phân biệt giữa 2 Kiến trúc:</strong> ResNet-50 phân độ <strong>Độ {result.dr_resnet.stage} ({result.dr_resnet.badge})</strong> | ViT-B/16 phân độ <strong>Độ {result.dr_vit.stage} ({result.dr_vit.badge})</strong>. Khuyến nghị bác sĩ đối chiếu bản đồ nhiệt của cả 2 mô hình.
-                                    </div>
-                                  )}
+                                  <div>
+                                    <strong>Kết quả báo cáo là ensemble:</strong> lớp {result.dr_result?.stage} ({result.dr_result?.badge}).
+                                    ResNet-50: lớp {result.dr_resnet.stage} ({result.dr_resnet.badge}).
+                                    ViT-B/16: lớp {result.dr_vit.stage} ({result.dr_vit.badge}).
+                                    {isAgreement
+                                      ? " Hai nhánh trùng lớp."
+                                      : " Hai nhánh khác lớp. Ensemble là quyết định đã chọn trên tập validation."}
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -634,6 +577,14 @@ export default function App() {
                               </div>
 
                               <div className="view-tabs">
+                                {result.dr_result?.heatmap_base64 && (
+                                  <button
+                                    className={`view-tab ${activeHeatmapView === 'ensemble' ? 'active' : ''}`}
+                                    onClick={() => setActiveHeatmapView('ensemble')}
+                                  >
+                                    Ensemble 0.25 / 0.75
+                                  </button>
+                                )}
                                 {result.dr_resnet?.heatmap_base64 && result.dr_vit?.heatmap_base64 && (
                                   <button 
                                     className={`view-tab ${activeHeatmapView === 'compare' ? 'active' : ''}`}
@@ -690,7 +641,9 @@ export default function App() {
                                 <div className="single-heatmap-box">
                                   <img 
                                     src={
-                                      activeHeatmapView === 'vit' && result.dr_vit?.heatmap_base64 
+                                      activeHeatmapView === 'ensemble' && result.dr_result?.heatmap_base64
+                                        ? result.dr_result.heatmap_base64
+                                        : activeHeatmapView === 'vit' && result.dr_vit?.heatmap_base64 
                                         ? result.dr_vit.heatmap_base64 
                                         : activeHeatmapView === 'resnet' && result.dr_resnet?.heatmap_base64
                                         ? result.dr_resnet.heatmap_base64
@@ -709,6 +662,15 @@ export default function App() {
                             {/* Model Details Selector */}
                             <div className="model-details-card">
                               <div className="model-tab-buttons">
+                                {result.dr_result && (
+                                  <button
+                                    className={`model-subtab ${selectedDRModel === 'ensemble' ? 'active' : ''}`}
+                                    onClick={() => setSelectedDRModel('ensemble')}
+                                  >
+                                    <Layers size={14} />
+                                    <span>Ensemble 0.25 / 0.75</span>
+                                  </button>
+                                )}
                                 {result.dr_vit && (
                                   <button 
                                     className={`model-subtab ${selectedDRModel === 'vit' ? 'active' : ''}`}
@@ -724,7 +686,7 @@ export default function App() {
                                     onClick={() => setSelectedDRModel('resnet')}
                                   >
                                     <Cpu size={14} />
-                                    <span>ResNet-50 Baseline</span>
+                                    <span>ResNet-50</span>
                                   </button>
                                 )}
                               </div>
@@ -751,7 +713,7 @@ export default function App() {
 
                               {/* 5-Grade Probability Bar Chart */}
                               <div className="prob-section">
-                                <span className="prob-section-title">Phân bố xác suất 5 mức độ theo ICDR ({currentDR.model_used}):</span>
+                                <span className="prob-section-title">Phân bố xác suất 6 lớp ({currentDR.model_used}). Lớp được chọn không phải lúc nào cũng là argmax:</span>
                                 <div className="prob-list">
                                   {Object.entries(currentDR.probabilities).map(([cName, pVal], idx) => {
                                     const isMax = idx === currentDR.stage;
@@ -788,153 +750,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* TAB 3: MODEL C (MULTI-LABEL RETINAL SCREENING) */}
-                    {dashboardTab === 'model_c' && (
-                      <div className="tab-pane">
-                        {result.model_c_result ? (
-                          <div>
-                            {/* Model C Header Info */}
-                            <div className="model-c-header-card">
-                              <div className="c-header-left">
-                                <span className="c-badge">Model C • Multi-Source Retinal Classifier</span>
-                                <h2>Sàng lọc 10 Nhóm Dấu hiệu Bệnh lý Võng mạc</h2>
-                                <p className="c-subtitle">
-                                  Kiến trúc: EfficientNet-B0 được huấn luyện từ dữ liệu hợp nhất RFMiD + ODIR-5K có điều hòa ngữ nghĩa. Ngưỡng phân loại được tối ưu hóa chuẩn mực từ tập Validation.
-                                </p>
-                              </div>
-                              <div className="c-header-right">
-                                <span className="c-version">{result.model_c_result.model_version}</span>
-                                <span className="c-epoch">Epoch: {result.model_c_result.checkpoint_meta?.epoch || 'best'}</span>
-                              </div>
-                            </div>
-
-                            {/* Overall Disease Risk Screening Banner */}
-                            <div className={`risk-banner ${result.model_c_result.overall_disease_risk ? 'risk-banner-pos' : 'risk-banner-neg'}`}>
-                              <div className="risk-banner-icon">
-                                {result.model_c_result.overall_disease_risk ? <AlertTriangle size={24} /> : <CheckCircle2 size={24} />}
-                              </div>
-                              <div className="risk-banner-text">
-                                <h3>
-                                  Tín hiệu Sàng lọc Bất thường (General Risk): {result.model_c_result.overall_disease_risk ? 'CÓ DẤU HIỆU BỆNH LÝ (POSITIVE)' : 'KHÔNG PHÁT HIỆN BẤT THƯỜNG (NEGATIVE)'}
-                                </h3>
-                                <p>
-                                  * Lưu ý học thuật: <code>RISK</code> đóng vai trò là cờ báo động sàng lọc sơ bộ (screening flag), không phải là một bệnh lý giải phẫu độc lập. Kết quả phản ánh tổng thể võng mạc có xuất hiện tổn thương nghi vấn cần hội chẩn y khoa hay không.
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Detected Conditions Summary List */}
-                            <div className="detected-summary-section">
-                              <div className="section-label">
-                                <Check size={16} />
-                                <span>Các nhóm bệnh lý vượt ngưỡng phát hiện ({result.model_c_result.num_detected_conditions} bệnh):</span>
-                              </div>
-                              
-                              {result.model_c_result.detected_diseases.length > 0 ? (
-                                <div className="detected-cards-grid">
-                                  {result.model_c_result.detected_diseases.map(d => (
-                                    <div key={d.code} className="detected-item-card">
-                                      <div className="item-card-top">
-                                        <span className="code-pill">{d.code}</span>
-                                        <span className="conf-pill">{d.confidence_pct}%</span>
-                                      </div>
-                                      <h4 className="item-name">{d.name}</h4>
-                                      <p className="item-desc">{d.vietnamese_desc}</p>
-                                      <div className="item-thresh-info">
-                                        Xác suất: <strong>{d.probability ?? (d.confidence_pct/100).toFixed(4)}</strong> | Ngưỡng cắt: <strong>{d.threshold ?? '0.1600'}</strong>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="no-diseases-box">
-                                  ✓ Không có bệnh lý riêng lẻ nào vượt ngưỡng cảnh báo (Tất cả 10 lớp đều nằm dưới ngưỡng quyết định).
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Full 10-Class Disease Screening Table */}
-                            <div className="full-classes-section">
-                              <div className="section-label">
-                                <BarChart3 size={16} />
-                                <span>Bảng đối soát chi tiết xác suất & ngưỡng quyết định (10 Nhóm bệnh lý):</span>
-                              </div>
-
-                              <div className="classes-table-wrap">
-                                <table className="classes-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Mã</th>
-                                      <th>Tên Bệnh lý (Anh / Việt)</th>
-                                      <th>Xác suất dự đoán</th>
-                                      <th>Ngưỡng quyết định (τ)</th>
-                                      <th>Trực quan hóa</th>
-                                      <th>Kết luận sàng lọc</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {Object.entries(result.model_c_result.full_probabilities).map(([code, pInfo]) => {
-                                      const meta = DISEASE_LABELS[code] || { vi: pInfo.disease_name, en: pInfo.disease_name, tag: 'Chung' };
-                                      const isPos = pInfo.detected;
-                                      const probPct = (pInfo.probability * 100).toFixed(1);
-                                      const threshPct = (pInfo.threshold * 100).toFixed(1);
-                                      return (
-                                        <tr key={code} className={isPos ? 'row-detected' : ''}>
-                                          <td className="td-code">
-                                            <strong>{code}</strong>
-                                            <span className="tag-micro">{meta.tag}</span>
-                                          </td>
-                                          <td className="td-name">
-                                            <div className="name-vi">{meta.vi}</div>
-                                            <div className="name-en">{meta.en}</div>
-                                          </td>
-                                          <td className="td-prob">
-                                            <strong>{(pInfo.probability).toFixed(4)}</strong>
-                                            <span className="prob-pct-sub">({probPct}%)</span>
-                                          </td>
-                                          <td className="td-thresh">
-                                            <span>{(pInfo.threshold).toFixed(4)}</span>
-                                            <span className="thresh-pct-sub">({threshPct}%)</span>
-                                          </td>
-                                          <td className="td-bar">
-                                            <div className="bar-track-wrap">
-                                              {/* Threshold marker */}
-                                              <div 
-                                                className="thresh-marker" 
-                                                style={{ left: `${Math.min(100, pInfo.threshold * 100)}%` }}
-                                                title={`Ngưỡng τ = ${pInfo.threshold}`}
-                                              />
-                                              {/* Probability bar */}
-                                              <div 
-                                                className={`bar-fill-c ${isPos ? 'fill-positive' : 'fill-negative'}`}
-                                                style={{ width: `${Math.min(100, pInfo.probability * 100)}%` }}
-                                              />
-                                            </div>
-                                          </td>
-                                          <td className="td-status">
-                                            {isPos ? (
-                                              <span className="badge-pos">● Phát hiện</span>
-                                            ) : (
-                                              <span className="badge-neg">○ Bình thường</span>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="alert-error">
-                            <AlertCircle size={18} />
-                            <span>{result.model_c_error || "Mô hình Model C không khả dụng"}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {/* TAB 4: CLINICAL EXPLANATION & DISCLAIMER */}
                     {dashboardTab === 'explanation' && (
                       <div className="tab-pane">
@@ -942,20 +757,23 @@ export default function App() {
                           <div className="exp-section">
                             <h3>
                               <ShieldCheck size={18} className="text-primary" />
-                              <span>Nguyên tắc Phối hợp Độc lập giữa Model B và Model C</span>
+                              <span>Cách đọc kết quả 6 lớp</span>
                             </h3>
-                            <p>
-                              Hệ thống thiết kế theo kiến trúc <strong>phân ly nhiệm vụ độc lập (Decoupled Task Architecture)</strong>:
-                            </p>
                             <ul>
                               <li>
-                                <strong>Model B (DR Staging)</strong>: Chuyên trách đánh giá mức độ tổn thương võng mạc tiểu đường theo 5 giai đoạn chuẩn quốc tế (từ Độ 0 - Không bệnh đến Độ 4 - Tăng sinh). Mô hình được huấn luyện theo cơ chế thứ bậc (Ordinal Classification) và cung cấp bản đồ nhiệt Grad-CAM giúp giải thích vùng tổn thương.
+                                <strong>Model A</strong> nhìn ảnh gốc và chỉ quyết định ảnh có phải đáy mắt hay không. Ngưỡng giữ nguyên 0.965.
                               </li>
                               <li>
-                                <strong>Model C (Retinal Multi-Label)</strong>: Chuyên trách phát hiện đa bệnh lý đồng mắc (comorbidities) như thoái hóa hoàng điểm (ARMD), cận thị thoái hóa (MYA), màng trước võng mạc (ERM), biến đổi glôcôm (ODC) hoặc lắng đọng Drusen.
+                                <strong>Model B</strong> chỉ chạy khi Model A chấp nhận. Ảnh được cắt nền tối, resize 256, rồi Ben Graham (hệ số 4, Gaussian σ = 10, mặt nạ tròn 0.95) trước khi chuẩn hóa ImageNet.
                               </li>
                               <li>
-                                <strong>Không triệt tiêu hoặc ghi đè kết quả</strong>: Nếu Model B dự đoán Grade 0 (không có DR), điều này không đồng nghĩa bệnh nhân hoàn toàn không có bệnh mắt khác. Ngược lại, nếu Model C báo phát hiện DR, nhãn này chỉ đóng vai trò sàng lọc nhị phân và không làm thay đổi phân độ chi tiết của Model B.
+                                Xác suất ensemble = 0.25 × ResNet-50 + 0.75 × ViT-B/16. Nếu argmax là lớp 5, kết quả là lớp 5. Nếu không, mức DR là giá trị kỳ vọng của 5 lớp đầu, cắt bởi ngưỡng [0.95, 1.35, 2.35, 3.15].
+                              </li>
+                              <li>
+                                Lớp 5 là một nhóm chung cho tổn thương không thuộc thang DR. Nó không nêu tên đục thủy tinh thể, glôcôm, AMD, cận thị bệnh lý hay tắc mạch.
+                              </li>
+                              <li>
+                                Số liệu test khóa trên 8818 ảnh: ensemble Acc 69.62%, macro-F1 0.5371, QWK 0.5842, SCORE 0.5607. Mild NPDR vẫn là lớp yếu.
                               </li>
                             </ul>
                           </div>
@@ -991,7 +809,7 @@ export default function App() {
               <strong>Khóa luận Tốt nghiệp Đại học</strong> • Đề tài: Nghiên cứu Vision Transformer và ứng dụng phân loại mức độ bệnh võng mạc đái tháo đường từ ảnh đáy võng mạc mắt.
             </div>
             <div className="footer-sub">
-              Tích hợp 3 Mô hình Độc lập: Model A (MobileNetV3 Gate) • Model B (ResNet-50 & ViT-B/16 Hybrid) • Model C (EfficientNet-B0 E2 Multi-Label).
+              Model A (MobileNetV3 Gate) • Model B (ensemble ResNet-50 0.25 và ViT-B/16 0.75, 6 lớp).
             </div>
           </div>
         </div>

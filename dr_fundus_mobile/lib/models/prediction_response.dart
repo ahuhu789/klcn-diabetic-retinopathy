@@ -1,5 +1,4 @@
 import 'dr_prediction.dart';
-import 'model_c_prediction.dart';
 
 class PredictionResponse {
   final bool isFundus;
@@ -12,8 +11,6 @@ class PredictionResponse {
   final DRPrediction? drVit;
   final DRPrediction? drResult;
   final String? drError;
-  final ModelCPrediction? modelCResult;
-  final String? modelCError;
   final String? clinicalDisclaimer;
 
   PredictionResponse({
@@ -27,8 +24,6 @@ class PredictionResponse {
     this.drVit,
     this.drResult,
     this.drError,
-    this.modelCResult,
-    this.modelCError,
     this.clinicalDisclaimer,
   });
 
@@ -52,10 +47,6 @@ class PredictionResponse {
           ? DRPrediction.fromJson(json['dr_result'])
           : null,
       drError: json['dr_error'],
-      modelCResult: json['model_c_result'] != null
-          ? ModelCPrediction.fromJson(json['model_c_result'])
-          : null,
-      modelCError: json['model_c_error'],
       clinicalDisclaimer: json['clinical_disclaimer'],
     );
   }
@@ -72,8 +63,6 @@ class PredictionResponse {
       'dr_vit': drVit?.toJson(),
       'dr_result': drResult?.toJson(),
       'dr_error': drError,
-      'model_c_result': modelCResult?.toJson(),
-      'model_c_error': modelCError,
       'clinical_disclaimer': clinicalDisclaimer,
     };
   }

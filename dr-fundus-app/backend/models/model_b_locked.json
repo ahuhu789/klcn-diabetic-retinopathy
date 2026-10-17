@@ -1,0 +1,25 @@
+{
+  "kernel": "nguynhuythanh/klcn-retinal-6class-v2-hybrid-14ep-early",
+  "kernel_version": 4,
+  "label_table": "unified_6class_v2 in_primary=1",
+  "final_decode": "ensemble_threshold",
+  "threshold_adopted": true,
+  "ensemble_resnet_weight": 0.25,
+  "ensemble_vit_weight": 0.75,
+  "thresholds": [0.95, 1.35, 2.35, 3.15],
+  "n_test": 8818,
+  "checkpoints": {
+    "resnet": "resnet50_hybrid_ordinal_best_score.pth",
+    "vit": "vit_b16_hybrid_ordinal_best_score.pth"
+  },
+  "test_argmax": {
+    "resnet": {"acc": 0.7037877069630302, "macro_f1": 0.5004725878281101, "qwk_dr": 0.4514340775041852, "score": 0.47595333266614764},
+    "vit": {"acc": 0.7496030845996825, "macro_f1": 0.5458685064367594, "qwk_dr": 0.5613862656824575, "score": 0.5536273860596085}
+  },
+  "test_ensemble_threshold": {
+    "acc": 0.6961896121569517,
+    "macro_f1": 0.5371438981750335,
+    "qwk_dr": 0.5842312978442641,
+    "score": 0.5606875980096488
+  }
+}

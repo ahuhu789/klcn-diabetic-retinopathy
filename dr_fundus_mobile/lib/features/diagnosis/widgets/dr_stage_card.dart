@@ -49,7 +49,9 @@ class DRStageCard extends StatelessWidget {
                     border: Border.all(color: stageColor.withOpacity(0.3)),
                   ),
                   child: Text(
-                    'CẤP ĐỘ ${drResult.stage}: ${drResult.badge.toUpperCase()}',
+                    drResult.stage == 5
+                        ? 'LỚP 5: ${drResult.badge.toUpperCase()}'
+                        : 'CẤP ${drResult.stage}: ${drResult.badge.toUpperCase()}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

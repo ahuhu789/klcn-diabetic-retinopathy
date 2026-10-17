@@ -12,50 +12,18 @@ void main() {
         'threshold': 0.965,
         'message': 'Ảnh đáy mắt hợp lệ',
         'processing_time_ms': 2276.17,
-        'model_status': {'model_a': 'ready', 'model_b': 'ready', 'model_c': 'ready'},
+        'model_status': {'model_a': 'ready', 'model_b': 'ready'},
         'dr_result': {
-          'model_used': 'ViT-B/16 & ResNet-50 Hybrid',
+          'model_used': 'Ensemble ResNet 0.25 + ViT 0.75',
           'stage': 3,
           'stage_name': 'Muc do Nang',
-          'badge': 'Mức độ Nặng (Tiền tăng sinh)',
+          'badge': 'Mức độ Nặng',
           'confidence': 0.85,
           'description': 'Nhiều xuất huyết võng mạc vi mạch',
-          'advice': 'Cần can thiệp chuyên khoa mắt khẩn trương',
-          'benchmark_note': 'Hybrid Ordinal Staging',
-          'probabilities': {'0': 0.01, '1': 0.04, '2': 0.1, '3': 0.85, '4': 0.0},
+          'advice': 'Cần khám chuyên khoa mắt',
+          'benchmark_note': 'Ensemble 6 lớp',
+          'probabilities': {'0': 0.01, '1': 0.02, '2': 0.05, '3': 0.85, '4': 0.04, '5': 0.03},
           'heatmap_base64': 'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
-        },
-        'model_c_result': {
-          'model_name': 'EfficientNet-B0 E2',
-          'model_version': 'E2',
-          'input_type': 'Single Fundus Image',
-          'overall_disease_risk': true,
-          'num_detected_conditions': 1,
-          'detected_diseases': [
-            {
-              'code': 'DR',
-              'name': 'Diabetic Retinopathy',
-              'vietnamese_desc': 'Bệnh võng mạc đái tháo đường',
-              'confidence_pct': 96.07,
-              'probability': 0.9607,
-              'threshold': 0.16,
-            }
-          ],
-          'full_probabilities': {
-            'DR': {
-              'name': 'Diabetic Retinopathy',
-              'probability': 0.9607,
-              'threshold': 0.16,
-              'detected': true,
-            },
-            'ARMD': {
-              'name': 'Age-related Macular Degeneration',
-              'probability': 0.05,
-              'threshold': 0.28,
-              'detected': false,
-            }
-          },
-          'clinical_disclaimer': 'Nghiên cứu học thuật KLCN',
         },
         'clinical_disclaimer': 'Bản quyền HUIT KLCN',
       };
@@ -68,10 +36,7 @@ void main() {
       expect(response.drResult, isNotNull);
       expect(response.drResult!.stage, 3);
       expect(response.drResult!.probabilities['3'], 0.85);
-      expect(response.modelCResult, isNotNull);
-      expect(response.modelCResult!.overallDiseaseRisk, isTrue);
-      expect(response.modelCResult!.detectedDiseases.length, 1);
-      expect(response.modelCResult!.detectedDiseases.first.code, 'DR');
+      expect(response.drResult!.probabilities.length, 6);
     });
 
     test('2. Test Model A Gate Rejection response', () {
@@ -82,7 +47,6 @@ void main() {
         'message': 'Ảnh bị từ chối: Không phải ảnh đáy võng mạc hợp lệ',
         'processing_time_ms': 54.2,
         'dr_result': null,
-        'model_c_result': null,
       };
 
       final response = PredictionResponse.fromJson(mockJson);
@@ -90,7 +54,6 @@ void main() {
       expect(response.isFundus, isFalse);
       expect(response.fundusConfidence, lessThan(0.965));
       expect(response.drResult, isNull);
-      expect(response.modelCResult, isNull);
     });
 
     test('3. Test SampleImageInfo parsing', () {

@@ -16,61 +16,48 @@
 
 ---
 
-### 🌟 Hệ thống Ứng dụng Hoàn chỉnh (RetinaGuard AI - 3-Model Decoupled Pipeline)
+### Hệ thống ứng dụng (RetinaGuard AI)
 
-Ứng dụng web y tế toàn diện đã được hiện thực hóa và đóng gói hoàn chỉnh trong thư mục [`dr-fundus-app/`](file:///c:/Users/thanh/Desktop/klcn/dr-fundus-app):
+Web nằm trong `dr-fundus-app/`. App Flutter nằm trong `dr_fundus_mobile/`.
 
-1. **Model A – Fundus Validation Gate (MobileNetV3-Small LiteRT):**
-   - Kiểm duyệt chất lượng ảnh đầu vào, từ chối ảnh không phải đáy mắt với ngưỡng an toàn nghiêm ngặt **$\tau = 0.965$**.
-   - Bảo vệ hệ thống khỏi dữ liệu rác và ngắt pipeline ngay lập tức nếu ảnh không đạt chuẩn.
+1. **Model A – cổng ảnh đáy mắt (MobileNetV3-Small):**
+   - Nhìn ảnh gốc. Ngưỡng giữ **0.965**. Ảnh không phải đáy mắt thì Model B không chạy.
 
-2. **Model B – DR Severity Classification & Explainable AI (ViT-B/16 + ResNet-50 Hybrid Ordinal):**
-   - Phân loại 5 cấp độ bệnh võng mạc đái tháo đường theo thang chuẩn quốc tế ICDR (0: Bình thường, 1: Nhẹ, 2: Trung bình, 3: Nặng, 4: Tăng sinh).
-   - Huấn luyện theo hàm mất mát hồi quy thứ tự (Ordinal Loss) với bộ ngưỡng phân cách tối ưu: `[0.9500, 1.6759, 2.0500, 3.2500]`.
-   - Sinh bản đồ nhiệt **Dual Grad-CAM**: ViT Transformer Attention Rollout và ResNet Convolution Feature Attribution giúp bác sĩ đối chiếu vùng tổn thương vi mạch thực tế.
+2. **Model B – ensemble 6 lớp (ResNet-50 0.25 + ViT-B/16 0.75):**
+   - Checkpoint `*_best_score.pth` của kernel `klcn-retinal-6class-v2-hybrid-14ep-early` (version 4).
+   - Lớp 0–4 là thang DR. Lớp 5 là nhóm tổn thương không phải DR, không nêu tên từng bệnh.
+   - Ảnh đi qua Ben Graham 256 (cắt nền tối, hệ số 4, Gaussian σ = 10, mặt nạ tròn 0.95) rồi chuẩn hóa ImageNet.
+   - Nếu argmax là lớp 5 thì kết quả là lớp 5. Ngược lại, mức DR là giá trị kỳ vọng của 5 lớp đầu, cắt bởi `[0.95, 1.35, 2.35, 3.15]`.
+   - Test khóa, n = 8818: Acc 69.62%, macro-F1 0.5371, QWK 0.5842, SCORE 0.5607.
+   - Grad-CAM của từng nhánh lấy lớp đã giải mã. Heatmap ensemble là trộn 0.25 / 0.75.
 
-3. **Model C – Retinal Multi-label Screening (EfficientNet-B0 Harmonized):**
-   - Huấn luyện trên tập dữ liệu đa nguồn đã qua xử lý hài hòa hóa nhãn (RFMiD + ODIR-5K, E2 Checkpoint).
-   - Cảnh báo cờ rủi ro tổng quát (**Overall Disease Risk**) và sàng lọc đồng thời 9 bệnh lý võng mạc khác nhau (DR, AMD, MH, DN, MYA, BRVO, TSL, ODC,...).
-   - Áp dụng hệ thống ngưỡng quyết định động ($\tau_c$) được tối ưu hóa độc lập trên tập Validation.
+3. **Web:** React. Ba tab: tổng quan, Model B, giải thích. FastAPI phục vụ API tại cổng 8000. Bản `frontend/dist` được mount tại `/` nếu đã build.
 
-4. **Giao diện Bảng Điều khiển Web Y khoa (Modern Medical AI Dashboard):**
-   - Giao diện trực quan chuẩn lâm sàng (React + Vite, Tailwind-style design, Plus Jakarta Sans).
-   - 4 tab chuyên biệt: Tổng quan Chẩn đoán, Phân độ Model B & XAI, Sàng lọc Đa bệnh lý Model C, Giải thích kiến trúc & Tuyên bố trách nhiệm y khoa.
-   - Bản build tĩnh được FastAPI phục vụ trực tiếp tại cổng `http://127.0.0.1:8000`.
-
-5. **Ứng dụng Di động Đa nền tảng (RetinaGuard Mobile - Flutter App):**
-   - Đóng gói hoàn chỉnh trong thư mục [`dr_fundus_mobile/`](file:///c:/Users/thanh/Desktop/klcn/dr_fundus_mobile).
-   - Hỗ trợ chụp camera trực tiếp qua kính soi đáy mắt cầm tay hoặc chọn từ 10 mẫu ảnh bệnh lý lâm sàng.
-   - Trình xem tương tác **Dual Grad-CAM Opacity Blend Slider** (0% - 100%) và phóng to tổn thương vi mạch (Pinch-to-zoom).
-   - Tự động xuất phiếu kết quả sàng lọc chuẩn A4 file PDF kèm hình ảnh và khuyến nghị lâm sàng.
-   - Kết nối linh hoạt tới Backend qua Cloudflare Tunnel toàn cầu hoặc mạng nội bộ LAN.
+4. **Mobile:** Model A chạy bằng ONNX trên máy. Model B gọi server. Phiếu PDF liệt kê 6 lớp của ensemble.
 
 ---
 
 ## ⚡ Hướng dẫn Chạy Nhanh Ứng dụng trên Windows
 
+Đặt hai file sau vào `dr-fundus-app/backend/models/` (không commit, ViT vượt 100MB):
+
+- `resnet50_hybrid_ordinal_best_score.pth`
+- `vit_b16_hybrid_ordinal_best_score.pth`
+
 ```powershell
-# Di chuyển vào thư mục backend
-cd c:\Users\thanh\Desktop\klcn\dr-fundus-app\backend
-
-# Cài đặt thư viện phụ thuộc (nếu chưa có)
+cd dr-fundus-app\backend
 pip install -r requirements.txt
-
-# Khởi động ứng dụng (All-in-One: FastAPI + React Dashboard)
 python run_server.py
 ```
-- **Truy cập Giao diện Web:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- **Tài liệu API Swagger:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **Kiểm thử tự động E2E:** `python test_app_e2e.py` (7/7 test cases Passed)
+
+- Web: [http://127.0.0.1:8000](http://127.0.0.1:8000) khi đã có `frontend/dist`, hoặc `npm run dev` trong `frontend`.
+- Swagger: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- Kiểm tra giải mã, không cần GPU: `python test_decode.py`
 
 ---
 
 ## 📚 Danh mục Tài liệu & Báo cáo Nghiên cứu trong Repository
 
-- **[`DEMO_GUIDE.md`](file:///c:/Users/thanh/Desktop/klcn/DEMO_GUIDE.md):** Kịch bản thuyết trình bảo vệ 3–5 phút trước Hội đồng, hướng dẫn demo trực tiếp 3 kịch bản, và bộ câu hỏi Q&A phản biện chuẩn bị sẵn.
-- **[`dr-fundus-app/README.md`](file:///c:/Users/thanh/Desktop/klcn/dr-fundus-app/README.md):** Tài liệu hướng dẫn kỹ thuật chi tiết của ứng dụng Web.
-- **[`BAO_CAO_NGHIEN_CUU_MODEL_C.md`](file:///c:/Users/thanh/Desktop/klcn/BAO_CAO_NGHIEN_CUU_MODEL_C.md):** Báo cáo khoa học chính thức về quá trình nghiên cứu, hài hòa nhãn và huấn luyện Model C.
-- **[`MODEL_C_FINAL_ACADEMIC_CHECK.md`](file:///c:/Users/thanh/Desktop/klcn/MODEL_C_FINAL_ACADEMIC_CHECK.md):** Báo cáo kiểm toán liêm chính khoa học, tái lập kết quả thực nghiệm và kiểm tra trùng lặp dữ liệu.
-- **[`DATASET_AUDIT.md`](file:///c:/Users/thanh/Desktop/klcn/DATASET_AUDIT.md):** Báo cáo kiểm định 2 tập dữ liệu võng mạc RFMiD và ODIR-5K.
-- **[`LABEL_HARMONIZATION.md`](file:///c:/Users/thanh/Desktop/klcn/LABEL_HARMONIZATION.md):** Bảng ánh xạ hài hòa nhãn bệnh học mắt từ cấp độ bệnh nhân sang cấp độ từng mắt.
+- `DEMO_GUIDE.md`: kịch bản demo web.
+- `dr-fundus-app/README.md`: cách chạy backend và chỗ đặt checkpoint.
+- `dr_fundus_mobile/README.md`: app Flutter. Model B cần server. Không cần adb nếu chạy `flutter run -d windows`.

@@ -6,7 +6,6 @@ import '../../../core/utils/pdf_report_generator.dart';
 import '../controllers/diagnosis_controller.dart';
 import '../widgets/model_a_gate_badge.dart';
 import '../widgets/dr_stage_card.dart';
-import '../widgets/model_c_matrix_table.dart';
 import '../widgets/dual_gradcam_viewer.dart';
 import '../../../models/prediction_response.dart';
 
@@ -109,7 +108,7 @@ class ResultScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Hình ảnh nạp vào có độ tin cậy thấp hơn ngưỡng an toàn nghiêm ngặt 0.965. Để tránh sinh ra chẩn đoán giả, hệ thống tự động ngắt Model B và Model C.',
+                      'Ảnh có độ tin cậy thấp hơn ngưỡng 0.965. Model B không được chạy.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
                       textAlign: TextAlign.center,
                     ),
@@ -128,11 +127,9 @@ class ResultScreen extends ConsumerWidget {
                   children: [
                     _buildTabButton(0, 'Tổng quan', Icons.dashboard_outlined, state.dashboardTab, notifier),
                     const SizedBox(width: 6),
-                    _buildTabButton(1, 'Model B: DR & XAI', Icons.remove_red_eye_outlined, state.dashboardTab, notifier),
+                    _buildTabButton(1, 'Model B: 6 lớp', Icons.remove_red_eye_outlined, state.dashboardTab, notifier),
                     const SizedBox(width: 6),
-                    _buildTabButton(2, 'Model C: Sàng lọc', Icons.medical_services_outlined, state.dashboardTab, notifier),
-                    const SizedBox(width: 6),
-                    _buildTabButton(3, 'Giải thích & Disclaimer', Icons.info_outline, state.dashboardTab, notifier),
+                    _buildTabButton(2, 'Giải thích', Icons.info_outline, state.dashboardTab, notifier),
                   ],
                 ),
               ),
@@ -207,10 +204,9 @@ class ResultScreen extends ConsumerWidget {
                 drResult: res.drResult!,
                 drResnet: res.drResnet,
                 drVit: res.drVit,
-              ),
-            const SizedBox(height: 12),
-            if (res.modelCResult != null)
-              ModelCMatrixTable(modelCResult: res.modelCResult!),
+              )
+            else if (res.drError != null)
+              Text(res.drError!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           ],
         );
 
@@ -231,16 +227,6 @@ class ResultScreen extends ConsumerWidget {
         );
 
       case 2:
-        // Tab 2: Model C Sàng lọc Đa bệnh lý
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (res.modelCResult != null)
-              ModelCMatrixTable(modelCResult: res.modelCResult!),
-          ],
-        );
-
-      case 3:
       default:
         // Tab 3: Giải thích kiến trúc & Tuyên bố trách nhiệm y khoa
         return Column(
@@ -263,17 +249,17 @@ class ResultScreen extends ConsumerWidget {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    '1. Model B giải bài toán Ordinal Staging (Xếp hạng thứ tự 5 cấp độ nghiêm trọng) chuyên biệt cho riêng bệnh nhân đái tháo đường.',
+                    '1. Model A chạy trên điện thoại và chỉ nhận hoặc từ chối ảnh đáy mắt.',
                     style: TextStyle(fontSize: 11, height: 1.4, color: AppColors.textPrimary),
                   ),
                   SizedBox(height: 6),
                   Text(
-                    '2. Model C giải bài toán Multi-label Screening (Sàng lọc nhị phân đa bệnh lý) trên tập dữ liệu tổng hợp RFMiD + ODIR-5K.',
+                    '2. Model B chạy trên server: Ben Graham 256, rồi ensemble ResNet-50 (0.25) và ViT-B/16 (0.75). Lớp 0–4 là DR. Lớp 5 là nhóm không phải DR.',
                     style: TextStyle(fontSize: 11, height: 1.4, color: AppColors.textPrimary),
                   ),
                   SizedBox(height: 6),
                   Text(
-                    '3. Hai mô hình hoạt động trên 2 không gian bài toán toán học khác nhau. Việc tách biệt luồng xử lý đảm bảo sự cố của một mô hình không làm sập toàn bộ hệ thống và kết quả của hai mô hình không can thiệp, không làm sai lệch tính liêm chính khoa học của nhau.',
+                    '3. Ngưỡng đã chọn là 0.95, 1.35, 2.35, 3.15. Nếu argmax là lớp 5 thì kết quả là lớp 5. Lớp 5 không nêu tên từng bệnh.',
                     style: TextStyle(fontSize: 11, height: 1.4, color: AppColors.textSecondary),
                   ),
                 ],

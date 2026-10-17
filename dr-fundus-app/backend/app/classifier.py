@@ -1,88 +1,111 @@
 import os
 import io
+import csv
+import json
 import base64
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models, transforms
 from PIL import Image
-import numpy as np
-import pandas as pd
 import timm
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 import matplotlib.cm as cm
 
-# 5 cap do benh vong mac theo tieu chuan ICDR / EyePACS
+from app.decode import advanced_predict_one, blend_probs
+from app.preprocess import ben_graham_uint8
+
 CLASSES = [
-    "0 - Khong benh (No DR)",
-    "1 - Nhe (Mild DR)",
-    "2 - Trung binh (Moderate DR)",
-    "3 - Nang (Severe DR)",
-    "4 - Tang sinh (Proliferative DR)"
+    "0 - Không bệnh (No DR)",
+    "1 - Nhẹ (Mild NPDR)",
+    "2 - Trung bình (Moderate NPDR)",
+    "3 - Nặng (Severe NPDR)",
+    "4 - Tăng sinh (Proliferative DR)",
+    "5 - Tổn thương không phải DR",
 ]
 
 SEVERITY_INFO = {
     0: {
-        "title": "Giai doan 0: Khong phat hien ton thuong benh vong mac (No DR)",
-        "badge": "Binh thuong",
-        "description": "Vong mac hoan toan binh thuong, khong co dau hieu vi phinh mach hoac xuat huyet.",
-        "advice": "Tai kham dinh ky sau 12 thang. Duy tri duong huyet va huyet ap o muc on dinh."
+        "title": "Giai đoạn 0: Không phát hiện tổn thương bệnh võng mạc đái tháo đường",
+        "badge": "Bình thường",
+        "description": "Võng mạc không có dấu hiệu vi phình mạch hoặc xuất huyết thuộc thang DR.",
+        "advice": "Tái khám định kỳ sau 12 tháng. Duy trì đường huyết và huyết áp ổn định.",
     },
     1: {
-        "title": "Giai doan 1: Benh vong mac dai thao duong nhe (Mild NPDR)",
-        "badge": "Muc do Nhe",
-        "description": "Xuat hien vi phinh mach nho (microaneurysms) o cac mao mach vong mac.",
-        "advice": "Kiem tra lai day mat sau 6 - 9 thang. Quan ly chat che chi so HbA1c va lipid mau."
+        "title": "Giai đoạn 1: Bệnh võng mạc đái tháo đường nhẹ (Mild NPDR)",
+        "badge": "Mức độ nhẹ",
+        "description": "Dấu hiệu phù hợp với vi phình mạch nhỏ ở mao mạch võng mạc.",
+        "advice": "Kiểm tra lại đáy mắt sau 6–9 tháng. Theo dõi HbA1c và lipid máu.",
     },
     2: {
-        "title": "Giai doan 2: Benh vong mac dai thao duong trung binh (Moderate NPDR)",
-        "badge": "Muc do Trung binh",
-        "description": "Xuat hien nhieu vi phinh mach, xuat huyet hinh cham hoac ngon lua, kem xuat tiet cung va xuat tiet mem.",
-        "advice": "Kham chuyen khoa nhan sau 3 - 6 thang. Can chup mach huynh quang day mat neu co nghi ngo phu hoang diem."
+        "title": "Giai đoạn 2: Bệnh võng mạc đái tháo đường trung bình (Moderate NPDR)",
+        "badge": "Mức độ trung bình",
+        "description": "Nhiều vi phình mạch, xuất huyết dạng chấm hoặc ngọn lửa, có thể kèm xuất tiết.",
+        "advice": "Khám chuyên khoa mắt sau 3–6 tháng. Cân nhắc chụp mạch huỳnh quang nếu nghi phù hoàng điểm.",
     },
     3: {
-        "title": "Giai doan 3: Benh vong mac dai thao duong nang (Severe NPDR)",
-        "badge": "Muc do Nang (Tien tang sinh)",
-        "description": "Ton thuong nghiem trong theo quy tac 4-2-1: Xuat huyet vong mac tai 4 goc phan tu hoac xoan tinh mach tai 2 goc.",
-        "advice": "Nguy co cao tien trien sang the tang sinh. Can can thiep quang dong laser hoac tiem noi nhan Anti-VEGF kip thoi."
+        "title": "Giai đoạn 3: Bệnh võng mạc đái tháo đường nặng (Severe NPDR)",
+        "badge": "Mức độ nặng",
+        "description": "Tổn thương nặng theo quy tắc 4-2-1: xuất huyết ở 4 góc phần tư hoặc tĩnh mạch chuỗi hạt.",
+        "advice": "Nguy cơ tiến triển sang thể tăng sinh. Cần khám đáy mắt sớm để xem xét laser hoặc anti-VEGF.",
     },
     4: {
-        "title": "Giai doan 4: Benh vong mac dai thao duong tang sinh (Proliferative DR)",
-        "badge": "Muc do Nguy hiem (Tang sinh)",
-        "description": "Hinh thanh tan mach bat thuong de vo gay xuat huyet dich kinh hoac bong vong mac co keo.",
-        "advice": "Cap thiet: Can thiep phau thuat cat dich kinh (Vitrectomy) hoac quang dong toan vong mac (PRP) ngay lap tuc de bao ton thi luc."
-    }
+        "title": "Giai đoạn 4: Bệnh võng mạc đái tháo đường tăng sinh (Proliferative DR)",
+        "badge": "Tăng sinh",
+        "description": "Tân mạch dễ vỡ, có thể gây xuất huyết dịch kính hoặc bong võng mạc co kéo.",
+        "advice": "Cần khám chuyên khoa mắt sớm. Đây không phải chỉ định phẫu thuật tự động từ một ảnh.",
+    },
+    5: {
+        "title": "Lớp 5: Tổn thương võng mạc không thuộc thang DR",
+        "badge": "Không phải DR",
+        "description": "Ensemble gán ảnh vào nhóm tổn thương không phải bệnh võng mạc đái tháo đường. Lớp này là một nhóm chung, không nêu tên từng bệnh.",
+        "advice": "Không đọc kết quả này như một chẩn đoán đục thủy tinh thể, glôcôm, AMD hay tắc mạch. Cần bác sĩ mắt xem ảnh.",
+    },
 }
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 IMG_SIZE = 256
+NUM_CLASSES = 6
+RESNET_FILENAME = "resnet50_hybrid_ordinal_best_score.pth"
+VIT_FILENAME = "vit_b16_hybrid_ordinal_best_score.pth"
 
-inference_transforms = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
-])
+normalize = transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
 
-def build_resnet50(num_classes=5):
+
+def build_resnet50(num_classes=NUM_CLASSES):
     model = models.resnet50(weights=None)
     model.fc = nn.Linear(model.fc.in_features, num_classes)
     return model
 
-def build_vit_b16(num_classes=5):
+
+def build_vit_b16(num_classes=NUM_CLASSES):
     return timm.create_model(
-        'vit_base_patch16_224',
+        "vit_base_patch16_224",
         pretrained=False,
         img_size=IMG_SIZE,
-        num_classes=num_classes
+        num_classes=num_classes,
     )
 
+
+def _load_state_dict(path, device):
+    try:
+        state = torch.load(path, map_location=device, weights_only=True)
+    except TypeError:
+        state = torch.load(path, map_location=device)
+    if isinstance(state, dict) and "model_state" in state:
+        state = state["model_state"]
+    elif isinstance(state, dict) and "state_dict" in state:
+        state = state["state_dict"]
+    if not isinstance(state, dict):
+        raise RuntimeError(f"Checkpoint không phải state_dict: {os.path.basename(path)}")
+    return {key.replace("module.", ""): value for key, value in state.items()}
+
+
 class GradCAMResNet50:
-    """
-    Grad-CAM for CNN architecture (ResNet-50 layer4).
-    Extracts high-resolution convolutional feature map activations and gradients.
-    """
     def __init__(self, model, target_layer):
         self.model = model
         self.target_layer = target_layer
@@ -97,36 +120,21 @@ class GradCAMResNet50:
     def _save_gradient(self, module, grad_input, grad_output):
         self.gradients = grad_output[0].detach()
 
-    def generate_heatmap(self, input_tensor, target_class=None):
-        self.model.zero_grad()
+    def generate_heatmap(self, input_tensor, target_class):
+        self.model.zero_grad(set_to_none=True)
         output = self.model(input_tensor)
-        
-        if target_class is None:
-            target_class = torch.argmax(output, dim=1).item()
-            
         one_hot = torch.zeros_like(output)
-        one_hot[0, target_class] = 1.0
-        output.backward(gradient=one_hot, retain_graph=True)
-        
+        one_hot[0, int(target_class)] = 1.0
+        output.backward(gradient=one_hot, retain_graph=False)
         weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
         cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
         cam = F.relu(cam)
-        cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode='bilinear', align_corners=False)
-        cam = cam.squeeze().cpu().numpy()
-        
-        cam_min, cam_max = cam.min(), cam.max()
-        if cam_max > cam_min:
-            cam = (cam - cam_min) / (cam_max - cam_min)
-        else:
-            cam = np.zeros_like(cam)
-            
-        return cam, output.detach()
+        cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear", align_corners=False)
+        cam = cam.squeeze().detach().cpu().numpy()
+        return _normalize_cam(cam)
+
 
 class GradCAMViT:
-    """
-    Grad-CAM for Vision Transformer (ViT-B/16).
-    Extracts Self-Attention block patch tokens, gradients, and projects attention to 2D image coordinates.
-    """
     def __init__(self, model, target_layer):
         self.model = model
         self.target_layer = target_layer
@@ -141,211 +149,218 @@ class GradCAMViT:
     def _save_gradient(self, module, grad_input, grad_output):
         self.gradients = grad_output[0].detach()
 
-    def generate_heatmap(self, input_tensor, target_class=None):
-        self.model.zero_grad()
+    def generate_heatmap(self, input_tensor, target_class):
+        self.model.zero_grad(set_to_none=True)
         output = self.model(input_tensor)
-        
-        if target_class is None:
-            target_class = torch.argmax(output, dim=1).item()
-            
         one_hot = torch.zeros_like(output)
-        one_hot[0, target_class] = 1.0
-        output.backward(gradient=one_hot, retain_graph=True)
-        
-        # Patch tokens are at index 1: (excluding CLS token at 0)
-        act = self.activations[:, 1:, :]   # (1, 256, 768)
-        grad = self.gradients[:, 1:, :]     # (1, 256, 768)
-        
-        weights = torch.mean(grad, dim=1, keepdim=True) # (1, 1, 768) channel importance
-        cam = torch.sum(weights * act, dim=-1)           # (1, 256) spatial patch importance
+        one_hot[0, int(target_class)] = 1.0
+        output.backward(gradient=one_hot, retain_graph=False)
+        act = self.activations[:, 1:, :]
+        grad = self.gradients[:, 1:, :]
+        weights = torch.mean(grad, dim=1, keepdim=True)
+        cam = torch.sum(weights * act, dim=-1)
         cam = F.relu(cam)
-        
-        h = w = int(np.sqrt(cam.shape[1])) # 16x16 patch grid
-        cam = cam.reshape(1, 1, h, w)
-        cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode='bilinear', align_corners=False)
-        cam = cam.squeeze().cpu().numpy()
-        
-        cam_min, cam_max = cam.min(), cam.max()
-        if cam_max > cam_min:
-            cam = (cam - cam_min) / (cam_max - cam_min)
-        else:
-            cam = np.zeros_like(cam)
-            
-        return cam, output.detach()
+        side = int(round(cam.shape[1] ** 0.5))
+        if side * side != cam.shape[1]:
+            raise RuntimeError("ViT Grad-CAM không khớp lưới patch 16x16 của ảnh 256.")
+        cam = cam.reshape(1, 1, side, side)
+        cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear", align_corners=False)
+        cam = cam.squeeze().detach().cpu().numpy()
+        return _normalize_cam(cam)
 
-def render_heatmap_overlay(cam_mask: np.ndarray, img_np: np.ndarray) -> str:
-    """Combines 2D CAM mask [0, 1] with RGB normalized image [0, 1] using Jet colormap."""
+
+def _normalize_cam(cam):
+    cam_min, cam_max = float(cam.min()), float(cam.max())
+    if cam_max > cam_min:
+        return (cam - cam_min) / (cam_max - cam_min)
+    return np.zeros_like(cam)
+
+
+def render_heatmap_overlay(cam_mask, img_np):
     if hasattr(matplotlib, "colormaps"):
-        colormap = matplotlib.colormaps['jet']
+        colormap = matplotlib.colormaps["jet"]
     else:
-        colormap = cm.get_cmap('jet')
-        
+        colormap = cm.get_cmap("jet")
     heatmap_colored = colormap(cam_mask)[:, :, :3]
-    overlay = 0.55 * img_np + 0.45 * heatmap_colored
-    overlay = np.clip(overlay, 0, 1)
+    overlay = np.clip(0.55 * img_np + 0.45 * heatmap_colored, 0, 1)
     overlay_pil = Image.fromarray((overlay * 255).astype(np.uint8))
-    
     buffered = io.BytesIO()
     overlay_pil.save(buffered, format="JPEG", quality=92)
     return "data:image/jpeg;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+
+def _pct(value):
+    return f"{100.0 * float(value):.2f}%"
+
+
+def _metric_note(prefix, row, n_test):
+    return (
+        f"{prefix} | test n={n_test} | Acc {_pct(row['acc'])} | "
+        f"Macro-F1 {float(row['macro_f1']):.4f} | QWK {float(row['qwk_dr']):.4f}"
+    )
+
+
 class DRClassifier:
+    """6-class ResNet-50 + ViT-B/16 ensemble from the locked v2 run.
+
+    Reported result is 0.25 * ResNet + 0.75 * ViT, then the SCORE thresholds.
+    There is no fallback to the older 5-class Hugging Face weights.
     """
-    Diabetic Retinopathy Dual Staging Engine:
-    - ResNet-50 Standalone (CNN - Local Pathology Focus + Grad-CAM)
-    - ViT-B/16 Standalone (Vision Transformer - Global Self-Attention Focus + Grad-CAM)
-    - Zero Leakage: Evaluated on Patient-stratified split
-    - Optimal Ordinal Thresholding for both models
-    """
-    def __init__(self, device: str = None):
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = torch.device(device)
-            
+
+    def __init__(self, device=None):
+        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        models_dir = os.path.join(base_dir, "models")
-        
-        # 1. Nạp ngưỡng cắt Ordinal Thresholds tối ưu
-        self.thresholds = [0.95, 1.6759, 2.05, 3.25]
-        thresh_csv = os.path.join(models_dir, "ordinal_thresholds.csv")
-        if os.path.exists(thresh_csv):
-            try:
-                tdf = pd.read_csv(thresh_csv)
-                if "threshold" in tdf.columns and len(tdf) == 4:
-                    self.thresholds = [round(float(v), 4) for v in tdf["threshold"].values]
-                    print(f"Loaded Optimal Ordinal Thresholds from CSV: {self.thresholds}")
-            except Exception as e:
-                print(f"Using default ordinal thresholds {self.thresholds}: {e}")
-        
-        # 2. Khởi tạo & nạp trọng số ResNet-50 Hybrid Ordinal
-        self.resnet_model = build_resnet50(num_classes=5)
-        r50_candidates = [
-            os.path.join(models_dir, "resnet50_hybrid_ordinal_best_qwk.pth"),
-            os.path.join(models_dir, "resnet50_ce_best.pth"),
-            os.path.join(models_dir, "resnet50_baseline_best.pth")
-        ]
-        r50_loaded = False
-        for wp in r50_candidates:
-            if wp and os.path.exists(wp) and os.path.getsize(wp) > 1000:
-                state_dict = torch.load(wp, map_location=self.device)
-                clean = {k.replace("module.", ""): v for k, v in state_dict.items()}
-                self.resnet_model.load_state_dict(clean, strict=False)
-                print(f"Loaded ResNet-50 model from: {os.path.basename(wp)}")
-                r50_loaded = True
-                break
-        
-        if not r50_loaded:
-            print("Downloading ResNet-50 from Hugging Face Hub (slyviee/klcn-resnet50-dr)...")
-            try:
-                from huggingface_hub import hf_hub_download
-                downloaded_path = hf_hub_download(
-                    repo_id="slyviee/klcn-resnet50-dr",
-                    filename="resnet50_baseline_best.pth"
-                )
-                state_dict = torch.load(downloaded_path, map_location=self.device)
-                clean = {k.replace("module.", ""): v for k, v in state_dict.items()}
-                self.resnet_model.load_state_dict(clean, strict=False)
-                print("Loaded ResNet-50 from HF Hub cache.")
-            except Exception as e:
-                print(f"Warning: could not load ResNet-50: {e}")
-
-        self.resnet_model.to(self.device)
-        self.resnet_model.eval()
-        self.grad_cam_resnet = GradCAMResNet50(self.resnet_model, self.resnet_model.layer4[-1])
-
-        # 3. Khởi tạo & nạp trọng số ViT-B/16 Hybrid Ordinal
+        self.models_dir = os.path.join(base_dir, "models")
+        self.ready = False
+        self.load_error = ""
+        self.thresholds = [0.95, 1.35, 2.35, 3.15]
+        self.resnet_weight = 0.25
+        self.vit_weight = 0.75
+        self.n_test = 8818
+        self.test_argmax = {}
+        self.test_ensemble = {}
+        self.resnet_model = None
         self.vit_model = None
-        self.vit_loaded = False
+        self.grad_cam_resnet = None
         self.grad_cam_vit = None
-        vit_path = os.path.join(models_dir, "vit_b16_hybrid_ordinal_best_qwk.pth")
-        if os.path.exists(vit_path) and os.path.getsize(vit_path) > 1000:
-            try:
-                self.vit_model = build_vit_b16(num_classes=5)
-                vit_ckpt = torch.load(vit_path, map_location=self.device)
-                self.vit_model.load_state_dict(vit_ckpt, strict=False)
-                self.vit_model.to(self.device)
-                self.vit_model.eval()
-                self.grad_cam_vit = GradCAMViT(self.vit_model, self.vit_model.blocks[-1].norm1)
-                self.vit_loaded = True
-                print("Loaded ViT-B/16 Hybrid Ordinal model successfully! (Grad-CAM ViT Enabled)")
-            except Exception as e:
-                print(f"Note: ViT-B/16 could not be loaded ({e}).")
+        self._read_locked_spec()
+        self._read_thresholds()
+        try:
+            self._load_models()
+        except Exception as exc:
+            self.ready = False
+            self.load_error = str(exc)
+            print(f"Model B was not loaded: {exc}", flush=True)
 
-    def predict(self, image_pil: Image.Image) -> dict:
-        img_rgb = image_pil.convert("RGB")
-        
-        # Tiền xử lý khớp với kích thước huấn luyện 256x256
-        crop_transform = transforms.Compose([
-            transforms.Resize((IMG_SIZE, IMG_SIZE))
-        ])
-        img_cropped = crop_transform(img_rgb)
-        img_np = np.array(img_cropped) / 255.0
-        
-        tensor_input = inference_transforms(img_rgb).unsqueeze(0).to(self.device)
-        levels = np.arange(5, dtype=np.float32)
-        
-        # ============================================================
-        # 1. MO HINH RESNET-50 (CNN) - TACH BIET HOAN TOAN
-        # ============================================================
-        cam_mask_r50, logits_r50 = self.grad_cam_resnet.generate_heatmap(tensor_input)
-        probs_r50 = F.softmax(logits_r50, dim=1).squeeze().detach().cpu().numpy()
-        
-        exp_sev_r50 = float(np.sum(probs_r50 * levels))
-        pred_stage_r50 = int(np.digitize(exp_sev_r50, self.thresholds))
-        pred_stage_r50 = min(max(pred_stage_r50, 0), 4)
-        
-        heatmap_r50_b64 = render_heatmap_overlay(cam_mask_r50, img_np)
-        info_r50 = SEVERITY_INFO[pred_stage_r50]
-        prob_dict_r50 = {CLASSES[i]: round(float(probs_r50[i]), 4) for i in range(len(CLASSES))}
-        
-        dr_resnet = {
-            "model_used": "ResNet-50 (CNN Architecture)",
-            "stage": pred_stage_r50,
-            "stage_name": info_r50["title"],
-            "badge": info_r50["badge"],
-            "confidence": round(float(probs_r50[pred_stage_r50]), 4),
-            "description": info_r50["description"],
-            "advice": info_r50["advice"],
-            "benchmark_note": f"QWK: 0.6352 | Accuracy: 74.22% | Macro-F1: 0.4904 (Ngưỡng Ordinal: {self.thresholds})",
-            "probabilities": prob_dict_r50,
-            "heatmap_base64": heatmap_r50_b64
-        }
-        
-        # ============================================================
-        # 2. MO HINH VISION TRANSFORMER VIT-B/16 - TACH BIET HOAN TOAN
-        # ============================================================
-        dr_vit = None
-        if self.vit_loaded and self.vit_model is not None and self.grad_cam_vit is not None:
-            cam_mask_vit, logits_vit = self.grad_cam_vit.generate_heatmap(tensor_input)
-            probs_vit = F.softmax(logits_vit, dim=1).squeeze().detach().cpu().numpy()
-            
-            exp_sev_vit = float(np.sum(probs_vit * levels))
-            pred_stage_vit = int(np.digitize(exp_sev_vit, self.thresholds))
-            pred_stage_vit = min(max(pred_stage_vit, 0), 4)
-            
-            heatmap_vit_b64 = render_heatmap_overlay(cam_mask_vit, img_np)
-            info_vit = SEVERITY_INFO[pred_stage_vit]
-            prob_dict_vit = {CLASSES[i]: round(float(probs_vit[i]), 4) for i in range(len(CLASSES))}
-            
-            dr_vit = {
-                "model_used": "Vision Transformer ViT-B/16 (Self-Attention Architecture)",
-                "stage": pred_stage_vit,
-                "stage_name": info_vit["title"],
-                "badge": info_vit["badge"],
-                "confidence": round(float(probs_vit[pred_stage_vit]), 4),
-                "description": info_vit["description"],
-                "advice": info_vit["advice"],
-                "benchmark_note": f"QWK: 0.6972 | Accuracy: 78.54% | Macro-F1: 0.5335 (Ngưỡng Ordinal: {self.thresholds})",
-                "probabilities": prob_dict_vit,
-                "heatmap_base64": heatmap_vit_b64
-            }
-            
-        # dr_result tra ve ViT neu co, neu khong thi ResNet de duy tri tuong thich nguoc
-        primary_result = dr_vit if dr_vit is not None else dr_resnet
-        
+    def _read_locked_spec(self):
+        path = os.path.join(self.models_dir, "model_b_locked.json")
+        if not os.path.exists(path):
+            return
+        with open(path, "r", encoding="utf-8") as handle:
+            spec = json.load(handle)
+        self.resnet_weight = float(spec["ensemble_resnet_weight"])
+        self.vit_weight = float(spec["ensemble_vit_weight"])
+        self.thresholds = [float(v) for v in spec["thresholds"]]
+        self.n_test = int(spec.get("n_test", self.n_test))
+        self.test_argmax = spec.get("test_argmax", {})
+        self.test_ensemble = spec.get("test_ensemble_threshold", {})
+
+    def _read_thresholds(self):
+        path = os.path.join(self.models_dir, "ordinal_thresholds.csv")
+        if not os.path.exists(path):
+            return
+        with open(path, "r", encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        if len(rows) == 4 and "threshold" in rows[0]:
+            self.thresholds = [float(row["threshold"]) for row in rows]
+            print(f"Loaded ordinal thresholds: {self.thresholds}", flush=True)
+
+    def _load_models(self):
+        resnet_path = os.path.join(self.models_dir, RESNET_FILENAME)
+        vit_path = os.path.join(self.models_dir, VIT_FILENAME)
+        missing = [
+            name for name, path in ((RESNET_FILENAME, resnet_path), (VIT_FILENAME, vit_path))
+            if not (os.path.exists(path) and os.path.getsize(path) > 1000)
+        ]
+        if missing:
+            raise RuntimeError(
+                "Thiếu checkpoint Model B trong backend/models: " + ", ".join(missing)
+                + ". Hai file best_score của lần train 6 lớp không được thay bằng trọng số 5 lớp."
+            )
+        resnet = build_resnet50(NUM_CLASSES)
+        resnet.load_state_dict(_load_state_dict(resnet_path, self.device), strict=True)
+        resnet.to(self.device)
+        resnet.eval()
+        vit = build_vit_b16(NUM_CLASSES)
+        vit.load_state_dict(_load_state_dict(vit_path, self.device), strict=True)
+        vit.to(self.device)
+        vit.eval()
+        self.resnet_model = resnet
+        self.vit_model = vit
+        self.grad_cam_resnet = GradCAMResNet50(resnet, resnet.layer4[-1])
+        self.grad_cam_vit = GradCAMViT(vit, vit.blocks[-1].norm1)
+        self.ready = True
+        print(
+            f"Loaded 6-class ensemble ResNet {self.resnet_weight:.2f} / ViT {self.vit_weight:.2f}",
+            flush=True,
+        )
+
+    def _pack(self, model_used, stage, probs, heatmap, benchmark_note):
+        info = SEVERITY_INFO[int(stage)]
         return {
-            "dr_resnet": dr_resnet,
-            "dr_vit": dr_vit,
-            "dr_result": primary_result
+            "model_used": model_used,
+            "stage": int(stage),
+            "stage_name": info["title"],
+            "badge": info["badge"],
+            "confidence": round(float(probs[int(stage)]), 4),
+            "description": info["description"],
+            "advice": info["advice"],
+            "benchmark_note": benchmark_note,
+            "probabilities": {CLASSES[i]: round(float(probs[i]), 4) for i in range(NUM_CLASSES)},
+            "heatmap_base64": heatmap,
         }
+
+    def predict(self, image_pil):
+        if not self.ready:
+            raise RuntimeError(self.load_error or "Model B chưa được nạp.")
+        enhanced = ben_graham_uint8(np.asarray(image_pil.convert("RGB")), target_size=IMG_SIZE)
+        display = enhanced.astype(np.float32) / 255.0
+        tensor = transforms.ToTensor()(Image.fromarray(enhanced))
+        tensor = normalize(tensor).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            probs_resnet = F.softmax(self.resnet_model(tensor), dim=1).squeeze(0).detach().cpu().numpy()
+            probs_vit = F.softmax(self.vit_model(tensor), dim=1).squeeze(0).detach().cpu().numpy()
+        probs_ensemble = np.asarray(
+            blend_probs(probs_resnet, probs_vit, self.resnet_weight, self.vit_weight),
+            dtype=np.float64,
+        )
+        stage_resnet = advanced_predict_one(probs_resnet, self.thresholds)
+        stage_vit = advanced_predict_one(probs_vit, self.thresholds)
+        stage_ensemble = advanced_predict_one(probs_ensemble, self.thresholds)
+
+        cam_resnet = self.grad_cam_resnet.generate_heatmap(tensor, stage_resnet)
+        cam_vit = self.grad_cam_vit.generate_heatmap(tensor, stage_vit)
+        cam_ensemble = _normalize_cam(
+            self.resnet_weight * cam_resnet + self.vit_weight * cam_vit
+        )
+        heat_resnet = render_heatmap_overlay(cam_resnet, display)
+        heat_vit = render_heatmap_overlay(cam_vit, display)
+        heat_ensemble = render_heatmap_overlay(cam_ensemble, display)
+
+        resnet_row = self.test_argmax.get("resnet", {})
+        vit_row = self.test_argmax.get("vit", {})
+        ensemble_row = self.test_ensemble or {}
+        note_resnet = _metric_note("Test argmax ResNet-50", resnet_row, self.n_test) if resnet_row else ""
+        note_vit = _metric_note("Test argmax ViT-B/16", vit_row, self.n_test) if vit_row else ""
+        note_ensemble = ""
+        if ensemble_row:
+            note_ensemble = (
+                _metric_note("Test ensemble ngưỡng SCORE", ensemble_row, self.n_test)
+                + f" | SCORE {float(ensemble_row['score']):.4f}"
+                + f" | trọng số ResNet {self.resnet_weight:.2f} / ViT {self.vit_weight:.2f}"
+                + f" | ngưỡng {self.thresholds}"
+            )
+
+        dr_resnet = self._pack(
+            "ResNet-50 (trọng số 0.25 trong ensemble)",
+            stage_resnet,
+            probs_resnet,
+            heat_resnet,
+            note_resnet,
+        )
+        dr_vit = self._pack(
+            "ViT-B/16 (trọng số 0.75 trong ensemble)",
+            stage_vit,
+            probs_vit,
+            heat_vit,
+            note_vit,
+        )
+        dr_result = self._pack(
+            f"Ensemble ResNet {self.resnet_weight:.2f} + ViT {self.vit_weight:.2f}",
+            stage_ensemble,
+            probs_ensemble,
+            heat_ensemble,
+            note_ensemble,
+        )
+        return {"dr_resnet": dr_resnet, "dr_vit": dr_vit, "dr_result": dr_result}
