@@ -66,7 +66,8 @@ class SampleCarousel extends ConsumerWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _buildFilterChip(context, ref, 'all', 'Tất cả (10)', state.sampleFilter),
+              _buildFilterChip(
+                  context, ref, 'all', 'Tất cả (${state.samples.length})', state.sampleFilter),
               const SizedBox(width: 6),
               _buildFilterChip(
                   context, ref, 'Bệnh võng mạc khác', 'Bệnh khác (AMD, Glaucoma, MYA, BRVO)', state.sampleFilter),
@@ -129,15 +130,17 @@ class SampleCarousel extends ConsumerWidget {
                           children: [
                             ClipRRect(
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                              child: Image.network(
-                                sample.url,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  color: AppColors.primary,
-                                  child: const Icon(Icons.broken_image,
-                                      color: Colors.white54, size: 24),
-                                ),
-                              ),
+                              child: sample.isBundledAsset
+                                  ? Image.asset(
+                                      sample.url,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _brokenThumb(),
+                                    )
+                                  : Image.network(
+                                      sample.url,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _brokenThumb(),
+                                    ),
                             ),
                             if (sample.tag != null)
                               Positioned(
@@ -256,6 +259,13 @@ class SampleCarousel extends ConsumerWidget {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _brokenThumb() {
+    return Container(
+      color: AppColors.primary,
+      child: const Icon(Icons.broken_image, color: Colors.white54, size: 24),
     );
   }
 

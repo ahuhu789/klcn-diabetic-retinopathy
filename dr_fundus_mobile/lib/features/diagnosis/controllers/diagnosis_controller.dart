@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/constants/clinical_samples.dart';
 import '../../../core/network/api_client.dart';
 import '../../../models/prediction_response.dart';
 import '../../../models/sample_image_info.dart';
@@ -60,10 +62,10 @@ class DiagnosisState {
     bool clearResult = false,
   }) {
     return DiagnosisState(
-      selectedFile: clearFile ? null : (selectedFile ?? this.selectedFile),
-      selectedSample: clearSample ? null : (selectedSample ?? this.selectedSample),
-      imageBytes: clearFile ? null : (imageBytes ?? this.imageBytes),
-      imageName: clearFile ? null : (imageName ?? this.imageName),
+      selectedFile: selectedFile ?? (clearFile ? null : this.selectedFile),
+      selectedSample: selectedSample ?? (clearSample ? null : this.selectedSample),
+      imageBytes: imageBytes ?? (clearFile ? null : this.imageBytes),
+      imageName: imageName ?? (clearFile ? null : this.imageName),
       samples: samples ?? this.samples,
       sampleFilter: sampleFilter ?? this.sampleFilter,
       isLoading: isLoading ?? this.isLoading,
@@ -82,16 +84,8 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
   final Ref _ref;
   final ImagePicker _picker = ImagePicker();
 
-  DiagnosisNotifier(this._apiClient, this._ref) : super(DiagnosisState()) {
-    loadSamples();
-  }
-
-  Future<void> loadSamples() async {
-    try {
-      final samples = await _apiClient.getSamples();
-      state = state.copyWith(samples: samples);
-    } catch (_) {}
-  }
+  DiagnosisNotifier(this._apiClient, this._ref)
+      : super(DiagnosisState(samples: ClinicalSamples.all));
 
   void setSampleFilter(String filter) {
     state = state.copyWith(sampleFilter: filter);
@@ -147,7 +141,13 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
         errorMessage: null,
       );
 
-      final bytes = await _apiClient.downloadSampleBytes(sample.url);
+      final Uint8List bytes;
+      if (sample.isBundledAsset) {
+        final data = await rootBundle.load(sample.url);
+        bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      } else {
+        bytes = await _apiClient.downloadSampleBytes(sample.url);
+      }
       state = state.copyWith(
         isLoading: false,
         imageBytes: bytes,

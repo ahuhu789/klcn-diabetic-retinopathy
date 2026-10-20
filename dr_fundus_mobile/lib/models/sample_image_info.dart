@@ -32,6 +32,9 @@ class SampleImageInfo {
     );
   }
 
+  /// True when [url] is a file inside the app bundle, not an HTTP path.
+  bool get isBundledAsset => url.startsWith('assets/');
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
