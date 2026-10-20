@@ -46,7 +46,7 @@ class RetinaGuardApp extends StatelessWidget {
           foregroundColor: AppColors.textPrimary,
           centerTitle: false,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: Colors.white,
           elevation: 1,
           shape: RoundedRectangleBorder(

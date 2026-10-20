@@ -344,7 +344,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          'Đang chạy Models A + B + C song song (${(state.uploadProgress * 100).toInt()}%)...',
+                          'Đang chạy Model A và ensemble B (${(state.uploadProgress * 100).toInt()}%)...',
                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -355,7 +355,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                         Icon(Icons.analytics_outlined, size: 20),
                         SizedBox(width: 8),
                         Text(
-                          'Phân tích Toàn diện (Models A + B + C)',
+                          'Phân tích Toàn diện (Model A + Ensemble B)',
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                       ],

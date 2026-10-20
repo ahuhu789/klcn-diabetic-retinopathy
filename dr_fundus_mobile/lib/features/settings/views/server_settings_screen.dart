@@ -80,7 +80,7 @@ class _ServerSettingsScreenState extends ConsumerState<ServerSettingsScreen> {
                         const SizedBox(height: 2),
                         Text(
                           state.isHealthy
-                              ? 'Độ trễ mạng: ${state.latencyMs ?? 0} ms • Models A, B, C đã sẵn sàng'
+                              ? 'Độ trễ mạng: ${state.latencyMs ?? 0} ms • Model A và ensemble B đã sẵn sàng'
                               : (state.errorMessage ?? 'Vui lòng kiểm tra lại địa chỉ máy chủ và kết nối mạng.'),
                           style: TextStyle(
                             fontSize: 11,
