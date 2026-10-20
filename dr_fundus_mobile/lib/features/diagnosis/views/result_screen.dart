@@ -202,8 +202,7 @@ class ResultScreen extends ConsumerWidget {
             if (res.drResult != null)
               DRStageCard(
                 drResult: res.drResult!,
-                drResnet: res.drResnet,
-                drVit: res.drVit,
+                branches: res.branches,
               )
             else if (res.drError != null)
               Text(res.drError!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
@@ -218,8 +217,7 @@ class ResultScreen extends ConsumerWidget {
             if (res.drResult != null)
               DRStageCard(
                 drResult: res.drResult!,
-                drResnet: res.drResnet,
-                drVit: res.drVit,
+                branches: res.branches,
               ),
             const SizedBox(height: 14),
             const DualGradCamViewer(),
@@ -254,12 +252,12 @@ class ResultScreen extends ConsumerWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    '2. Model B chạy trên server: Ben Graham 256, rồi ensemble ResNet-50 (0.25) và ViT-B/16 (0.75). Lớp 0–4 là DR. Lớp 5 là nhóm không phải DR.',
+                    '2. Model B chạy trên server: Ben Graham 512, rồi ensemble ViT-B/16-384 (0.45), EfficientNet-B4-448 (0.40) và EfficientNet-B4 hai đầu ra (0.15). Lớp 0–4 là DR. Lớp 5 là nhóm không phải DR.',
                     style: TextStyle(fontSize: 11, height: 1.4, color: AppColors.textPrimary),
                   ),
                   SizedBox(height: 6),
                   Text(
-                    '3. Ngưỡng đã chọn là 0.95, 1.35, 2.35, 3.15. Nếu argmax là lớp 5 thì kết quả là lớp 5. Lớp 5 không nêu tên từng bệnh.',
+                    '3. Giải mã phân tầng khóa trên validation: nếu p(lớp 5) > 0.50 thì kết quả là lớp 5, nếu không lấy argmax của lớp 0–4. TEST: SCORE 0.6861, QWK_DR 0.7572, macro-F1 0.6151. Lớp 5 không nêu tên từng bệnh.',
                     style: TextStyle(fontSize: 11, height: 1.4, color: AppColors.textSecondary),
                   ),
                 ],

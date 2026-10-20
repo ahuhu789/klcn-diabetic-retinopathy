@@ -18,10 +18,12 @@ class PdfReportGenerator {
     final pdf = pw.Document();
 
     // Chuẩn bị ảnh heatmap base64 nếu có
+    // Heatmap ensemble (tổng có trọng số Grad-CAM của 3 nhánh); nếu thiếu thì lấy nhánh ViT.
     pw.MemoryImage? vitHeatmapImage;
-    if (result.drVit?.heatmapBase64 != null) {
+    final heatmapSource = result.drResult?.heatmapBase64 ?? result.drVit?.heatmapBase64;
+    if (heatmapSource != null) {
       try {
-        final cleanBase64 = result.drVit!.heatmapBase64!
+        final cleanBase64 = heatmapSource
             .replaceAll(RegExp(r'^data:image\/[a-zA-Z]+;base64,'), '');
         vitHeatmapImage = pw.MemoryImage(base64Decode(cleanBase64));
       } catch (_) {}
@@ -233,7 +235,7 @@ class PdfReportGenerator {
                           ),
                         ),
                         pw.SizedBox(height: 4),
-                        pw.Text('Bản đồ nhiệt ViT Grad-CAM',
+                        pw.Text('Bản đồ nhiệt Grad-CAM (ensemble)',
                             style: const pw.TextStyle(fontSize: 8)),
                       ],
                     ),

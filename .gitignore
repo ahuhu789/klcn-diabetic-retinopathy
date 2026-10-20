@@ -31,10 +31,11 @@ ENV/
 env.bak/
 venv.bak/
 
-# Large Model B weights. ViT-B/16 is about 330MB and cannot be committed.
-# Place resnet50_hybrid_ordinal_best_score.pth and
-# vit_b16_hybrid_ordinal_best_score.pth in dr-fundus-app/backend/models/.
+# Large Model B v3 weights (ViT-B/16-384 is about 345MB) are never committed.
+# Place vitb16_384_best.pth, effb4_448_best.pth and effb4_448_twohead_best.pth
+# in dr-fundus-app/backend/models/ (download from the private Kaggle kernel outputs, see README.md).
 *.pth
+*.pth.tmp
 *.pt
 *.bin
 *.onnx

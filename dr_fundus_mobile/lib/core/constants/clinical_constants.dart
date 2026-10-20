@@ -27,8 +27,26 @@ class ClinicalConstants {
     5: 'Nhờ bác sĩ mắt xem ảnh. Không tự gắn tên bệnh từ lớp 5.',
   };
 
-  // Ngưỡng SCORE đã chọn của lần train 6 lớp.
-  static const List<double> ordinalThresholds = [0.95, 1.35, 2.35, 3.15];
+  // Model B v3 (khóa trên tập validation): ensemble 3 mô hình, giải mã phân tầng.
+  // Lớp 5 nếu p5 > t5, ngược lại argmax của 5 lớp DR.
+  static const Map<String, double> ensembleWeights = {
+    'vit3': 0.45,
+    'effb4': 0.40,
+    'e_twohead': 0.15,
+  };
+  static const Map<String, String> branchLabels = {
+    'ensemble': 'Ensemble',
+    'vit3': 'ViT-B/16-384',
+    'effb4': 'EfficientNet-B4-448',
+    'e_twohead': 'EffB4 hai đầu ra',
+    'vit': 'ViT-B/16 (v2, đã bỏ)',
+    'resnet': 'ResNet-50 (v2, đã bỏ)',
+  };
+  static const double hierarchicalT5 = 0.50;
+
+  // Số liệu TEST (8818 ảnh, chấm một lần sau khi khóa trên VAL).
+  static const String testMetricsSummary =
+      'TEST n=8818: Acc 79.36%, macro-F1 0.6151, QWK_DR 0.7572, SCORE 0.6861 (CI95 0.6684–0.7035).';
 
   // Tuyên bố miễn trừ trách nhiệm y khoa
   static const String clinicalDisclaimer =

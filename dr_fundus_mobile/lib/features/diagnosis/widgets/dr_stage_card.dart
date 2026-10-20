@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/clinical_constants.dart';
 import '../../../models/dr_prediction.dart';
 
 class DRStageCard extends StatelessWidget {
   final DRPrediction drResult;
-  final DRPrediction? drResnet;
-  final DRPrediction? drVit;
+
+  /// Các nhánh của ensemble Model B v3 (ViT-B/16-384, EffB4-448, EffB4 hai đầu ra).
+  final List<DRPrediction> branches;
 
   const DRStageCard({
     super.key,
     required this.drResult,
-    this.drResnet,
-    this.drVit,
+    this.branches = const [],
   });
 
   @override
   Widget build(BuildContext context) {
     final stageColor = AppColors.getStageColor(drResult.stage);
-    final hasAgreement = drVit != null && drResnet != null && drVit!.stage == drResnet!.stage;
+    final hasAgreement = branches.isNotEmpty && branches.every((b) => b.stage == drResult.stage);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -63,7 +64,7 @@ class DRStageCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (drVit != null && drResnet != null)
+              if (branches.length > 1)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
@@ -71,7 +72,9 @@ class DRStageCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    hasAgreement ? 'Đồng thuận ViT & CNN' : 'Chênh lệch ViT & CNN',
+                    hasAgreement
+                        ? 'Đồng thuận ${branches.length} nhánh'
+                        : 'Các nhánh chênh lệch',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -140,9 +143,33 @@ class DRStageCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // 5-class Probability Distribution Bars
+          if (branches.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: branches.map((b) {
+                final label = ClinicalConstants.branchLabels[b.branch] ?? b.modelUsed;
+                final w = b.weight != null ? ' • ${b.weight!.toStringAsFixed(2)}' : '';
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: Text(
+                    '$label$w: lớp ${b.stage}',
+                    style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 10),
+          ],
+
+          // 6-class Probability Distribution Bars
           const Text(
-            'Phân bố xác suất 5 giai đoạn (ICDR 0 - 4):',
+            'Phân bố xác suất 6 lớp (DR 0 - 4 và lớp 5):',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
@@ -150,9 +177,8 @@ class DRStageCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          ...List.generate(5, (stageIdx) {
-            final key = stageIdx.toString();
-            final prob = drResult.probabilities[key] ?? 0.0;
+          ...List.generate(6, (stageIdx) {
+            final prob = drResult.probFor(stageIdx);
             final isCurrentStage = drResult.stage == stageIdx;
             final barColor = AppColors.getStageColor(stageIdx);
 
@@ -163,7 +189,7 @@ class DRStageCard extends StatelessWidget {
                   SizedBox(
                     width: 70,
                     child: Text(
-                      'Cấp $stageIdx',
+                      stageIdx == 5 ? 'Lớp 5' : 'Cấp $stageIdx',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: isCurrentStage ? FontWeight.bold : FontWeight.normal,

@@ -1,7 +1,7 @@
 """
 Comprehensive End-to-End Application Test for dr-fundus-app
 Validates complete user flow:
-1. Health check and model initialization (Model A gate, Model B 6-class ensemble)
+1. Health check and model initialization (Model A gate, Model B v3 3-model 6-class ensemble)
 2. Sample images catalog
 3. Frontend static distribution serving (index.html, CSS, JS)
 4. Valid fundus image analysis:
@@ -66,6 +66,9 @@ class TestAppEndToEnd(unittest.TestCase):
         self.assertTrue(data["classifier_loaded"], "Model B Classifier is not loaded!")
         self.assertEqual(data["num_classes"], 6)
         self.assertEqual(data["gate_threshold"], 0.965)
+        self.assertEqual(data["model_b_version"], "v3")
+        self.assertEqual(data["ensemble_weights"], {"vit3": 0.45, "effb4": 0.4, "e_twohead": 0.15})
+        self.assertEqual(data["decode"]["family"], "hierarchical")
 
     def test_02_samples_catalog(self):
         """Test preset clinical sample images catalog."""
@@ -111,8 +114,14 @@ class TestAppEndToEnd(unittest.TestCase):
         self.assertIsNotNone(data["dr_result"])
         self.assertIn(data["dr_result"]["stage"], [0, 1, 2, 3, 4, 5])
         self.assertEqual(len(data["dr_result"]["probabilities"]), 6)
-        self.assertIsNotNone(data["dr_resnet"])
         self.assertIsNotNone(data["dr_vit"])
+        self.assertIsNotNone(data["dr_effb4"])
+        self.assertIsNotNone(data["dr_twohead"])
+        self.assertEqual(len(data["dr_branches"]), 3)
+        self.assertEqual([b["branch"] for b in data["dr_branches"]], ["vit3", "effb4", "e_twohead"])
+        self.assertAlmostEqual(sum(data["ensemble_weights"].values()), 1.0, places=6)
+        self.assertIsNone(data["dr_resnet"])
+        self.assertAlmostEqual(sum(data["dr_result"]["probabilities"].values()), 1.0, places=2)
         self.assertNotIn("model_c_result", data)
         print(f"Ensemble stage: {data['dr_result']['stage']} ({data['dr_result']['badge']}), Conf: {data['dr_result']['confidence']:.4f}")
 
@@ -138,7 +147,7 @@ class TestAppEndToEnd(unittest.TestCase):
         self.assertIn("bị từ chối", data["message"])
 
         self.assertIsNone(data["dr_result"])
-        self.assertIsNone(data["dr_resnet"])
+        self.assertIsNone(data["dr_branches"])
         self.assertIsNone(data["dr_vit"])
         print(f"Successfully rejected non-fundus image (Confidence: {data['fundus_confidence']:.4f} < 0.965). Pipeline stopped safely.")
 

@@ -1,22 +1,32 @@
-import os
-import io
-import csv
-import json
-import base64
+"""Model B v3: weighted 3-branch ensemble, 6 classes (DR 0-4 + class 5 'other').
 
+Branches (all trained on the Ben Graham 512 cache, EMA weights, best VAL SCORE):
+- ViT-B/16-384 v3   timm vit_base_patch16_384.augreg_in21k_ft_in1k, 6 logits, softmax
+- EffB4-448 v3      timm tf_efficientnet_b4.ns_jft_in1k, 6 logits, softmax
+- EffB4-448 two-head (Phase E): backbone num_classes=0 + head_b Linear(5) + head_a Linear(1);
+  p5 = sigmoid(A), p0..4 = (1 - p5) * softmax(B)
+Each branch: Resize((s, s)) of the 512 cache image, ToTensor, ImageNet normalize,
+TTA = mean of the probabilities of the image and its horizontal flip (as in train.py).
+Ensemble p = sum_i w_i p_i, then the decode locked on VAL (models/model_b_locked.json).
+"""
+import base64
+import io
+import json
+import os
+
+import matplotlib
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import models, transforms
 from PIL import Image
-import timm
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.cm as cm
+from torchvision import transforms
 
-from app.decode import advanced_predict_one, blend_probs
-from app.preprocess import ben_graham_uint8
+matplotlib.use("Agg")
+import matplotlib.cm as cm  # noqa: E402
+
+from app.decode import blend_probs, decode_record  # noqa: E402
+from app.preprocess import cache512_from_bytes, cache512_from_pil  # noqa: E402
 
 CLASSES = [
     "0 - Không bệnh (No DR)",
@@ -68,27 +78,39 @@ SEVERITY_INFO = {
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
-IMG_SIZE = 256
 NUM_CLASSES = 6
-RESNET_FILENAME = "resnet50_hybrid_ordinal_best_score.pth"
-VIT_FILENAME = "vit_b16_hybrid_ordinal_best_score.pth"
-
-normalize = transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+LOCKED_SPEC = "model_b_locked.json"
 
 
-def build_resnet50(num_classes=NUM_CLASSES):
-    model = models.resnet50(weights=None)
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
-    return model
+class TwoHeadNet(nn.Module):
+    """Same module layout as Phase E train.py so the state_dict loads with strict=True."""
+
+    def __init__(self, backbone):
+        super().__init__()
+        self.backbone = backbone
+        feat = backbone.num_features
+        self.head_b = nn.Linear(feat, 5)
+        self.head_a = nn.Linear(feat, 1)
+
+    def forward(self, x):
+        f = self.backbone(x)
+        return torch.cat([self.head_b(f), self.head_a(f)], dim=1)
 
 
-def build_vit_b16(num_classes=NUM_CLASSES):
-    return timm.create_model(
-        "vit_base_patch16_224",
-        pretrained=False,
-        img_size=IMG_SIZE,
-        num_classes=num_classes,
-    )
+def twohead_probs(logits):
+    logits = logits.float()
+    p5 = torch.sigmoid(logits[:, 5:6])
+    return torch.cat([(1.0 - p5) * torch.softmax(logits[:, :5], dim=1), p5], dim=1)
+
+
+def build_branch_model(arch, kind):
+    import timm
+
+    if kind == "twohead":
+        return TwoHeadNet(timm.create_model(arch, pretrained=False, num_classes=0))
+    if arch.startswith("vit_"):
+        return timm.create_model(arch, pretrained=False, num_classes=NUM_CLASSES, img_size=384)
+    return timm.create_model(arch, pretrained=False, num_classes=NUM_CLASSES)
 
 
 def _load_state_dict(path, device):
@@ -96,77 +118,14 @@ def _load_state_dict(path, device):
         state = torch.load(path, map_location=device, weights_only=True)
     except TypeError:
         state = torch.load(path, map_location=device)
-    if isinstance(state, dict) and "model_state" in state:
-        state = state["model_state"]
-    elif isinstance(state, dict) and "state_dict" in state:
-        state = state["state_dict"]
+    if isinstance(state, dict):
+        for key in ("ema_state", "model_state", "state_dict"):
+            if key in state and isinstance(state[key], dict):
+                state = state[key]
+                break
     if not isinstance(state, dict):
         raise RuntimeError(f"Checkpoint không phải state_dict: {os.path.basename(path)}")
-    return {key.replace("module.", ""): value for key, value in state.items()}
-
-
-class GradCAMResNet50:
-    def __init__(self, model, target_layer):
-        self.model = model
-        self.target_layer = target_layer
-        self.gradients = None
-        self.activations = None
-        self.target_layer.register_forward_hook(self._save_activation)
-        self.target_layer.register_full_backward_hook(self._save_gradient)
-
-    def _save_activation(self, module, input, output):
-        self.activations = output.detach()
-
-    def _save_gradient(self, module, grad_input, grad_output):
-        self.gradients = grad_output[0].detach()
-
-    def generate_heatmap(self, input_tensor, target_class):
-        self.model.zero_grad(set_to_none=True)
-        output = self.model(input_tensor)
-        one_hot = torch.zeros_like(output)
-        one_hot[0, int(target_class)] = 1.0
-        output.backward(gradient=one_hot, retain_graph=False)
-        weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
-        cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
-        cam = F.relu(cam)
-        cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear", align_corners=False)
-        cam = cam.squeeze().detach().cpu().numpy()
-        return _normalize_cam(cam)
-
-
-class GradCAMViT:
-    def __init__(self, model, target_layer):
-        self.model = model
-        self.target_layer = target_layer
-        self.gradients = None
-        self.activations = None
-        self.target_layer.register_forward_hook(self._save_activation)
-        self.target_layer.register_full_backward_hook(self._save_gradient)
-
-    def _save_activation(self, module, input, output):
-        self.activations = output.detach()
-
-    def _save_gradient(self, module, grad_input, grad_output):
-        self.gradients = grad_output[0].detach()
-
-    def generate_heatmap(self, input_tensor, target_class):
-        self.model.zero_grad(set_to_none=True)
-        output = self.model(input_tensor)
-        one_hot = torch.zeros_like(output)
-        one_hot[0, int(target_class)] = 1.0
-        output.backward(gradient=one_hot, retain_graph=False)
-        act = self.activations[:, 1:, :]
-        grad = self.gradients[:, 1:, :]
-        weights = torch.mean(grad, dim=1, keepdim=True)
-        cam = torch.sum(weights * act, dim=-1)
-        cam = F.relu(cam)
-        side = int(round(cam.shape[1] ** 0.5))
-        if side * side != cam.shape[1]:
-            raise RuntimeError("ViT Grad-CAM không khớp lưới patch 16x16 của ảnh 256.")
-        cam = cam.reshape(1, 1, side, side)
-        cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear", align_corners=False)
-        cam = cam.squeeze().detach().cpu().numpy()
-        return _normalize_cam(cam)
+    return {key.replace("module.", "", 1) if key.startswith("module.") else key: value for key, value in state.items()}
 
 
 def _normalize_cam(cam):
@@ -176,36 +135,117 @@ def _normalize_cam(cam):
     return np.zeros_like(cam)
 
 
+class GradCAM:
+    """Grad-CAM on one layer. CNN: 4D activation (B, C, H, W). ViT: tokens (B, N, C),
+    patch tokens after the prefix tokens are reshaped to a square grid (24 x 24 for 384/16)."""
+
+    def __init__(self, model, target_layer, kind, prefix_tokens=1):
+        self.model = model
+        self.kind = kind
+        self.prefix_tokens = prefix_tokens
+        self.activations = None
+        self.gradients = None
+        target_layer.register_forward_hook(self._save_activation)
+        target_layer.register_full_backward_hook(self._save_gradient)
+
+    def _save_activation(self, module, inputs, output):
+        self.activations = output.detach()
+
+    def _save_gradient(self, module, grad_input, grad_output):
+        self.gradients = grad_output[0].detach()
+
+    def heatmap(self, input_tensor, target_class, out_size):
+        self.model.zero_grad(set_to_none=True)
+        with torch.enable_grad():
+            logits = self.model(input_tensor)
+            # Two-head: column 5 is the other-disease logit (head A); 0-4 are head B logits.
+            score = logits[0, int(target_class)]
+            score.backward()
+        act, grad = self.activations, self.gradients
+        if act.dim() == 4:
+            weights = grad.mean(dim=(2, 3), keepdim=True)
+            cam = F.relu((weights * act).sum(dim=1, keepdim=True))
+        else:
+            act = act[:, self.prefix_tokens:, :]
+            grad = grad[:, self.prefix_tokens:, :]
+            weights = grad.mean(dim=1, keepdim=True)
+            cam = F.relu((weights * act).sum(dim=-1))
+            side = int(round(cam.shape[1] ** 0.5))
+            if side * side != cam.shape[1]:
+                raise RuntimeError("ViT Grad-CAM: số patch không tạo lưới vuông.")
+            cam = cam.reshape(1, 1, side, side)
+        cam = F.interpolate(cam, size=(out_size, out_size), mode="bilinear", align_corners=False)
+        self.model.zero_grad(set_to_none=True)
+        return _normalize_cam(cam.squeeze().detach().cpu().numpy())
+
+
 def render_heatmap_overlay(cam_mask, img_np):
-    if hasattr(matplotlib, "colormaps"):
-        colormap = matplotlib.colormaps["jet"]
-    else:
-        colormap = cm.get_cmap("jet")
+    colormap = matplotlib.colormaps["jet"] if hasattr(matplotlib, "colormaps") else cm.get_cmap("jet")
     heatmap_colored = colormap(cam_mask)[:, :, :3]
     overlay = np.clip(0.55 * img_np + 0.45 * heatmap_colored, 0, 1)
-    overlay_pil = Image.fromarray((overlay * 255).astype(np.uint8))
     buffered = io.BytesIO()
-    overlay_pil.save(buffered, format="JPEG", quality=92)
+    Image.fromarray((overlay * 255).astype(np.uint8)).save(buffered, format="JPEG", quality=92)
     return "data:image/jpeg;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
-def _pct(value):
-    return f"{100.0 * float(value):.2f}%"
-
-
 def _metric_note(prefix, row, n_test):
-    return (
-        f"{prefix} | test n={n_test} | Acc {_pct(row['acc'])} | "
-        f"Macro-F1 {float(row['macro_f1']):.4f} | QWK {float(row['qwk_dr']):.4f}"
+    if not row:
+        return ""
+    text = (
+        f"{prefix} | TEST n={n_test} | Acc {100.0 * float(row['acc']):.2f}% | "
+        f"Macro-F1 {float(row['macro_f1']):.4f} | QWK_DR {float(row['qwk_dr']):.4f} | SCORE {float(row['score']):.4f}"
     )
+    ci = row.get("score_ci95")
+    if ci:
+        text += f" (CI95 {float(ci[0]):.4f}–{float(ci[1]):.4f})"
+    return text
+
+
+class Branch:
+    def __init__(self, spec, device):
+        self.key = spec["key"]
+        self.label = spec["label"]
+        self.arch = spec["arch"]
+        self.kind = spec["kind"]
+        self.img_size = int(spec["img_size"])
+        self.weight = float(spec["weight"])
+        self.checkpoint = spec["checkpoint"]
+        self.decode = spec["decode"]
+        self.test = spec.get("test", {})
+        self.device = device
+        self.model = None
+        self.cam = None
+        self.transform = transforms.Compose([
+            transforms.Resize((self.img_size, self.img_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+        ])
+
+    def load(self, models_dir):
+        path = os.path.join(models_dir, self.checkpoint)
+        model = build_branch_model(self.arch, self.kind)
+        model.load_state_dict(_load_state_dict(path, self.device), strict=True)
+        model.to(self.device).eval()
+        self.model = model
+        if self.arch.startswith("vit_"):
+            self.cam = GradCAM(model, model.blocks[-1].norm1, "vit", getattr(model, "num_prefix_tokens", 1))
+        else:
+            net = model.backbone if self.kind == "twohead" else model
+            self.cam = GradCAM(model, net.bn2, "cnn")
+
+    def probs(self, tensor):
+        """TTA: average of the probabilities of the image and its horizontal flip."""
+        acc = None
+        with torch.no_grad():
+            for view in (tensor, torch.flip(tensor, dims=[3])):
+                out = self.model(view).float()
+                prob = twohead_probs(out) if self.kind == "twohead" else torch.softmax(out, dim=1)
+                acc = prob if acc is None else acc + prob
+        return (acc / 2.0).squeeze(0).cpu().numpy().astype(np.float64)
 
 
 class DRClassifier:
-    """6-class ResNet-50 + ViT-B/16 ensemble from the locked v2 run.
-
-    Reported result is 0.25 * ResNet + 0.75 * ViT, then the SCORE thresholds.
-    There is no fallback to the older 5-class Hugging Face weights.
-    """
+    """Model B v3: weighted ensemble ViT-B/16-384 v3 + EffB4-448 v3 + EffB4-448 two-head."""
 
     def __init__(self, device=None):
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -213,79 +253,60 @@ class DRClassifier:
         self.models_dir = os.path.join(base_dir, "models")
         self.ready = False
         self.load_error = ""
-        self.thresholds = [0.95, 1.35, 2.35, 3.15]
-        self.resnet_weight = 0.25
-        self.vit_weight = 0.75
+        self.spec = {}
+        self.branches = []
+        self.decode = {}
         self.n_test = 8818
-        self.test_argmax = {}
-        self.test_ensemble = {}
-        self.resnet_model = None
-        self.vit_model = None
-        self.grad_cam_resnet = None
-        self.grad_cam_vit = None
-        self._read_locked_spec()
-        self._read_thresholds()
         try:
+            self._read_locked_spec()
             self._load_models()
         except Exception as exc:
             self.ready = False
             self.load_error = str(exc)
             print(f"Model B was not loaded: {exc}", flush=True)
 
-    def _read_locked_spec(self):
-        path = os.path.join(self.models_dir, "model_b_locked.json")
-        if not os.path.exists(path):
-            return
-        with open(path, "r", encoding="utf-8") as handle:
-            spec = json.load(handle)
-        self.resnet_weight = float(spec["ensemble_resnet_weight"])
-        self.vit_weight = float(spec["ensemble_vit_weight"])
-        self.thresholds = [float(v) for v in spec["thresholds"]]
-        self.n_test = int(spec.get("n_test", self.n_test))
-        self.test_argmax = spec.get("test_argmax", {})
-        self.test_ensemble = spec.get("test_ensemble_threshold", {})
+    @property
+    def weights(self):
+        return {branch.key: branch.weight for branch in self.branches}
 
-    def _read_thresholds(self):
-        path = os.path.join(self.models_dir, "ordinal_thresholds.csv")
-        if not os.path.exists(path):
-            return
-        with open(path, "r", encoding="utf-8", newline="") as handle:
-            rows = list(csv.DictReader(handle))
-        if len(rows) == 4 and "threshold" in rows[0]:
-            self.thresholds = [float(row["threshold"]) for row in rows]
-            print(f"Loaded ordinal thresholds: {self.thresholds}", flush=True)
+    def _read_locked_spec(self):
+        path = os.path.join(self.models_dir, LOCKED_SPEC)
+        with open(path, "r", encoding="utf-8") as handle:
+            self.spec = json.load(handle)
+        self.decode = self.spec["ensemble"]["decode"]
+        self.n_test = int(self.spec.get("n_test", self.n_test))
+        self.branches = [Branch(item, self.device) for item in self.spec["branches"]]
+        total = sum(branch.weight for branch in self.branches)
+        if abs(total - 1.0) > 1e-6:
+            raise RuntimeError(f"Tổng trọng số ensemble phải bằng 1, đang là {total}")
 
     def _load_models(self):
-        resnet_path = os.path.join(self.models_dir, RESNET_FILENAME)
-        vit_path = os.path.join(self.models_dir, VIT_FILENAME)
         missing = [
-            name for name, path in ((RESNET_FILENAME, resnet_path), (VIT_FILENAME, vit_path))
-            if not (os.path.exists(path) and os.path.getsize(path) > 1000)
+            b.checkpoint for b in self.branches
+            if not (os.path.exists(os.path.join(self.models_dir, b.checkpoint))
+                    and os.path.getsize(os.path.join(self.models_dir, b.checkpoint)) > 1000)
         ]
         if missing:
             raise RuntimeError(
                 "Thiếu checkpoint Model B trong backend/models: " + ", ".join(missing)
-                + ". Hai file best_score của lần train 6 lớp không được thay bằng trọng số 5 lớp."
+                + ". Tải từ output các kernel Kaggle ghi trong models/model_b_locked.json (xem README)."
             )
-        resnet = build_resnet50(NUM_CLASSES)
-        resnet.load_state_dict(_load_state_dict(resnet_path, self.device), strict=True)
-        resnet.to(self.device)
-        resnet.eval()
-        vit = build_vit_b16(NUM_CLASSES)
-        vit.load_state_dict(_load_state_dict(vit_path, self.device), strict=True)
-        vit.to(self.device)
-        vit.eval()
-        self.resnet_model = resnet
-        self.vit_model = vit
-        self.grad_cam_resnet = GradCAMResNet50(resnet, resnet.layer4[-1])
-        self.grad_cam_vit = GradCAMViT(vit, vit.blocks[-1].norm1)
+        for branch in self.branches:
+            branch.load(self.models_dir)
         self.ready = True
-        print(
-            f"Loaded 6-class ensemble ResNet {self.resnet_weight:.2f} / ViT {self.vit_weight:.2f}",
-            flush=True,
-        )
+        print("Loaded Model B v3 ensemble " + ", ".join(f"{b.label} {b.weight:.2f}" for b in self.branches), flush=True)
 
-    def _pack(self, model_used, stage, probs, heatmap, benchmark_note):
+    def ensemble_label(self):
+        return " + ".join(f"{b.label} {b.weight:.2f}" for b in self.branches)
+
+    def decode_text(self):
+        d = self.decode
+        text = f"{d['family']} t5={d['t5']}"
+        if d.get("thresholds"):
+            text += f" ngưỡng {d['thresholds']}"
+        return text
+
+    def _pack(self, model_used, stage, probs, heatmap, benchmark_note, branch=None, weight=None, decode=None):
         info = SEVERITY_INFO[int(stage)]
         return {
             "model_used": model_used,
@@ -298,69 +319,69 @@ class DRClassifier:
             "benchmark_note": benchmark_note,
             "probabilities": {CLASSES[i]: round(float(probs[i]), 4) for i in range(NUM_CLASSES)},
             "heatmap_base64": heatmap,
+            "branch": branch,
+            "weight": weight,
+            "decode": decode,
         }
 
-    def predict(self, image_pil):
+    def preprocess(self, image_pil=None, raw_bytes=None):
+        if raw_bytes is not None:
+            try:
+                return cache512_from_bytes(raw_bytes)
+            except Exception:
+                pass
+        return cache512_from_pil(image_pil)
+
+    def predict_probs(self, image_pil=None, raw_bytes=None):
+        """Probabilities only (no Grad-CAM). Returns (cache512 PIL, {key: probs}, ensemble probs)."""
         if not self.ready:
             raise RuntimeError(self.load_error or "Model B chưa được nạp.")
-        enhanced = ben_graham_uint8(np.asarray(image_pil.convert("RGB")), target_size=IMG_SIZE)
-        display = enhanced.astype(np.float32) / 255.0
-        tensor = transforms.ToTensor()(Image.fromarray(enhanced))
-        tensor = normalize(tensor).unsqueeze(0).to(self.device)
+        img512 = self.preprocess(image_pil, raw_bytes)
+        branch_probs = {}
+        for branch in self.branches:
+            tensor = branch.transform(img512).unsqueeze(0).to(self.device)
+            branch_probs[branch.key] = branch.probs(tensor)
+        ens = np.asarray(blend_probs([branch_probs[b.key] for b in self.branches], [b.weight for b in self.branches]), dtype=np.float64)
+        return img512, branch_probs, ens
 
-        with torch.no_grad():
-            probs_resnet = F.softmax(self.resnet_model(tensor), dim=1).squeeze(0).detach().cpu().numpy()
-            probs_vit = F.softmax(self.vit_model(tensor), dim=1).squeeze(0).detach().cpu().numpy()
-        probs_ensemble = np.asarray(
-            blend_probs(probs_resnet, probs_vit, self.resnet_weight, self.vit_weight),
-            dtype=np.float64,
-        )
-        stage_resnet = advanced_predict_one(probs_resnet, self.thresholds)
-        stage_vit = advanced_predict_one(probs_vit, self.thresholds)
-        stage_ensemble = advanced_predict_one(probs_ensemble, self.thresholds)
-
-        cam_resnet = self.grad_cam_resnet.generate_heatmap(tensor, stage_resnet)
-        cam_vit = self.grad_cam_vit.generate_heatmap(tensor, stage_vit)
-        cam_ensemble = _normalize_cam(
-            self.resnet_weight * cam_resnet + self.vit_weight * cam_vit
-        )
-        heat_resnet = render_heatmap_overlay(cam_resnet, display)
-        heat_vit = render_heatmap_overlay(cam_vit, display)
-        heat_ensemble = render_heatmap_overlay(cam_ensemble, display)
-
-        resnet_row = self.test_argmax.get("resnet", {})
-        vit_row = self.test_argmax.get("vit", {})
-        ensemble_row = self.test_ensemble or {}
-        note_resnet = _metric_note("Test argmax ResNet-50", resnet_row, self.n_test) if resnet_row else ""
-        note_vit = _metric_note("Test argmax ViT-B/16", vit_row, self.n_test) if vit_row else ""
-        note_ensemble = ""
-        if ensemble_row:
-            note_ensemble = (
-                _metric_note("Test ensemble ngưỡng SCORE", ensemble_row, self.n_test)
-                + f" | SCORE {float(ensemble_row['score']):.4f}"
-                + f" | trọng số ResNet {self.resnet_weight:.2f} / ViT {self.vit_weight:.2f}"
-                + f" | ngưỡng {self.thresholds}"
+    def predict(self, image_pil, raw_bytes=None, with_heatmaps=True):
+        img512, branch_probs, ens = self.predict_probs(image_pil, raw_bytes)
+        stage = decode_record(ens, self.decode)
+        display = np.asarray(img512, dtype=np.float32) / 255.0
+        out_size = display.shape[0]
+        cams, results = {}, {}
+        for branch in self.branches:
+            probs = branch_probs[branch.key]
+            b_stage = decode_record(probs, branch.decode)
+            heat = None
+            if with_heatmaps:
+                # Grad-CAM of every branch targets the class decoded by the ensemble,
+                # so the blended map explains the reported result.
+                tensor = branch.transform(img512).unsqueeze(0).to(self.device)
+                cams[branch.key] = branch.cam.heatmap(tensor, stage, out_size)
+                heat = render_heatmap_overlay(cams[branch.key], display)
+            results[branch.key] = self._pack(
+                f"{branch.label} (trọng số {branch.weight:.2f} trong ensemble)",
+                b_stage, probs, heat,
+                _metric_note(f"{branch.label} đơn lẻ", branch.test, self.n_test),
+                branch=branch.key, weight=branch.weight, decode=branch.decode,
             )
-
-        dr_resnet = self._pack(
-            "ResNet-50 (trọng số 0.25 trong ensemble)",
-            stage_resnet,
-            probs_resnet,
-            heat_resnet,
-            note_resnet,
-        )
-        dr_vit = self._pack(
-            "ViT-B/16 (trọng số 0.75 trong ensemble)",
-            stage_vit,
-            probs_vit,
-            heat_vit,
-            note_vit,
-        )
+        heat_ens = None
+        if with_heatmaps:
+            blended = sum(b.weight * cams[b.key] for b in self.branches)
+            heat_ens = render_heatmap_overlay(_normalize_cam(blended), display)
         dr_result = self._pack(
-            f"Ensemble ResNet {self.resnet_weight:.2f} + ViT {self.vit_weight:.2f}",
-            stage_ensemble,
-            probs_ensemble,
-            heat_ensemble,
-            note_ensemble,
+            "Ensemble " + self.ensemble_label(),
+            stage, ens, heat_ens,
+            _metric_note("Ensemble 3 mô hình (khóa trên VAL)", self.spec["ensemble"].get("test", {}), self.n_test)
+            + f" | decode {self.decode_text()}",
+            branch="ensemble", weight=1.0, decode=self.decode,
         )
-        return {"dr_resnet": dr_resnet, "dr_vit": dr_vit, "dr_result": dr_result}
+        return {
+            "dr_result": dr_result,
+            "dr_branches": [results[b.key] for b in self.branches],
+            "dr_vit": results.get("vit3"),
+            "dr_effb4": results.get("effb4"),
+            "dr_twohead": results.get("e_twohead"),
+            "dr_resnet": None,
+        }

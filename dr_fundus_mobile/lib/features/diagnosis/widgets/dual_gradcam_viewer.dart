@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_view/photo_view.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/clinical_constants.dart';
 import '../controllers/diagnosis_controller.dart';
 
 class DualGradCamViewer extends ConsumerWidget {
@@ -17,11 +18,22 @@ class DualGradCamViewer extends ConsumerWidget {
     final res = state.result;
     if (res == null) return const SizedBox.shrink();
 
-    final vitHeatmapBase64 = res.drVit?.heatmapBase64 ?? res.drResult?.heatmapBase64;
-    final resnetHeatmapBase64 = res.drResnet?.heatmapBase64;
-
-    final isViT = state.activeGradCamModel == 'vit';
-    final activeHeatmapBase64 = isViT ? vitHeatmapBase64 : resnetHeatmapBase64;
+    // Model B v3: heatmap ensemble + một heatmap cho mỗi nhánh.
+    final options = <MapEntry<String, String>>[];
+    if (res.drResult?.heatmapBase64 != null) {
+      options.add(MapEntry('ensemble', res.drResult!.heatmapBase64!));
+    }
+    for (final b in res.branches) {
+      if (b.heatmapBase64 != null) {
+        options.add(MapEntry(b.branch ?? (identical(b, res.drResnet) ? 'resnet' : 'vit'), b.heatmapBase64!));
+      }
+    }
+    final active = options.firstWhere(
+      (o) => o.key == state.activeGradCamModel,
+      orElse: () => options.isNotEmpty ? options.first : const MapEntry('ensemble', ''),
+    );
+    final activeKey = active.key;
+    final activeHeatmapBase64 = active.value.isEmpty ? null : active.value;
 
     Uint8List? heatmapBytes;
     if (activeHeatmapBase64 != null) {
@@ -76,61 +88,35 @@ class DualGradCamViewer extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
 
-          // Switch Model Chips (ViT vs ResNet)
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => notifier.setActiveGradCamModel('vit'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isViT ? AppColors.accent : AppColors.background,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isViT ? AppColors.accent : AppColors.cardBorder,
-                      ),
+          // Chọn heatmap: ensemble hoặc từng nhánh
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: options.map((o) {
+              final selected = o.key == activeKey;
+              final label = ClinicalConstants.branchLabels[o.key] ?? o.key;
+              return GestureDetector(
+                onTap: () => notifier.setActiveGradCamModel(o.key),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.accent : AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected ? AppColors.accent : AppColors.cardBorder,
                     ),
-                    child: Center(
-                      child: Text(
-                        'ViT Attention Rollout',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: isViT ? FontWeight.bold : FontWeight.w600,
-                          color: isViT ? Colors.white : AppColors.textSecondary,
-                        ),
-                      ),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                      color: selected ? Colors.white : AppColors.textSecondary,
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => notifier.setActiveGradCamModel('resnet'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: !isViT ? AppColors.accent : AppColors.background,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: !isViT ? AppColors.accent : AppColors.cardBorder,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'ResNet-50 Layer-4',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: !isViT ? FontWeight.bold : FontWeight.w600,
-                          color: !isViT ? Colors.white : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              );
+            }).toList(),
           ),
           const SizedBox(height: 12),
 
@@ -196,9 +182,11 @@ class DualGradCamViewer extends ConsumerWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              isViT
-                  ? 'ViT Grad-CAM phản ánh trọng số liên kết ngữ cảnh không gian đa đầu chú ý (Transformer Self-Attention), tập trung vào phân bố tổn thương toàn cục.'
-                  : 'ResNet Grad-CAM phản ánh các đặc trưng cục bộ tầng sâu (Convolutional Layer 4), chỉ điểm chính xác các chấm xuất huyết và vi phình mạch.',
+              activeKey == 'ensemble'
+                  ? 'Heatmap ensemble là tổng có trọng số (0.45 / 0.40 / 0.15) Grad-CAM của ba nhánh, cùng nhắm vào lớp mà ensemble chọn.'
+                  : activeKey == 'vit3'
+                      ? 'ViT Grad-CAM tính trên token patch (lưới 24×24) của khối Transformer cuối, cho lớp mà ensemble chọn.'
+                      : 'EfficientNet-B4 Grad-CAM tính trên lớp tích chập cuối (bn2), cho lớp mà ensemble chọn.',
               style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.3),
             ),
           ),

@@ -23,7 +23,7 @@ class DiagnosisState {
   final String? errorMessage;
   final int dashboardTab;
   final double blendOpacity;
-  final String activeGradCamModel; // 'vit' or 'resnet'
+  final String activeGradCamModel; // 'ensemble', 'vit3', 'effb4' hoặc 'e_twohead'
 
   DiagnosisState({
     this.selectedFile,
@@ -38,7 +38,7 @@ class DiagnosisState {
     this.errorMessage,
     this.dashboardTab = 0,
     this.blendOpacity = 0.65,
-    this.activeGradCamModel = 'vit',
+    this.activeGradCamModel = 'ensemble',
   });
 
   DiagnosisState copyWith({

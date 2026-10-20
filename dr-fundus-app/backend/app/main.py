@@ -12,8 +12,8 @@ from app.classifier import DRClassifier
 
 app = FastAPI(
     title="Fundus Gate & Diabetic Retinopathy API",
-    description="Model A fundus gate plus a 6-class ResNet-50 / ViT-B/16 ensemble",
-    version="2.0.0"
+    description="Model A fundus gate plus a 6-class ensemble ViT-B/16-384 v3 + EfficientNet-B4-448 v3 + EfficientNet-B4-448 two-head",
+    version="3.0.0"
 )
 
 # CORS configuration
@@ -64,9 +64,15 @@ def health_check():
         "gate_loaded": g is not None,
         "classifier_loaded": ready,
         "num_classes": 6,
-        "ensemble_resnet_weight": c.resnet_weight if c else None,
-        "ensemble_vit_weight": c.vit_weight if c else None,
-        "ordinal_thresholds": c.thresholds if c else None,
+        "model_b_version": "v3",
+        "ensemble_weights": c.weights if c else None,
+        "ensemble_vit_weight": (c.weights.get("vit3") if c else None),
+        "decode": c.decode if c else None,
+        "branches": [
+            {"key": b.key, "label": b.label, "arch": b.arch, "img_size": b.img_size,
+             "weight": b.weight, "checkpoint": b.checkpoint}
+            for b in (c.branches if c else [])
+        ],
         "classifier_error": None if ready else (c.load_error if c else "classifier unavailable"),
         "gate_threshold": g.threshold if g else 0.965
     }
@@ -290,7 +296,7 @@ async def predict_image(file: UploadFile = File(...)):
     dr_err = None
     if classifier_inst is not None and classifier_inst.ready:
         try:
-            dr_data = classifier_inst.predict(image)
+            dr_data = classifier_inst.predict(image, raw_bytes=contents)
         except Exception as exc:
             dr_err = f"Không thể hoàn tất phân loại 6 lớp (Model B): {exc}"
     else:
@@ -306,17 +312,21 @@ async def predict_image(file: UploadFile = File(...)):
         processing_time_ms=total_elapsed_ms,
         model_status=current_status,
         message=(
-            "Ảnh đạt chuẩn đáy mắt ({:.2f}%). Đã chạy ensemble 6 lớp ResNet 0.25 / ViT 0.75.".format(
-                fundus_conf * 100
+            "Ảnh đạt chuẩn đáy mắt ({:.2f}%). Đã chạy ensemble 6 lớp {}.".format(
+                fundus_conf * 100, classifier_inst.ensemble_label()
             )
             if dr_data
             else "Ảnh đạt chuẩn đáy mắt ({:.2f}%), nhưng Model B không trả được kết quả. {}".format(
                 fundus_conf * 100, dr_err or ""
             )
         ),
-        dr_resnet=DRPrediction(**dr_data["dr_resnet"]) if (dr_data and dr_data.get("dr_resnet")) else None,
-        dr_vit=DRPrediction(**dr_data["dr_vit"]) if (dr_data and dr_data.get("dr_vit")) else None,
         dr_result=DRPrediction(**dr_data["dr_result"]) if (dr_data and dr_data.get("dr_result")) else None,
+        dr_branches=[DRPrediction(**b) for b in dr_data["dr_branches"]] if (dr_data and dr_data.get("dr_branches")) else None,
+        dr_vit=DRPrediction(**dr_data["dr_vit"]) if (dr_data and dr_data.get("dr_vit")) else None,
+        dr_effb4=DRPrediction(**dr_data["dr_effb4"]) if (dr_data and dr_data.get("dr_effb4")) else None,
+        dr_twohead=DRPrediction(**dr_data["dr_twohead"]) if (dr_data and dr_data.get("dr_twohead")) else None,
+        dr_resnet=None,
+        ensemble_weights=classifier_inst.weights if dr_data else None,
         dr_error=dr_err,
         clinical_disclaimer=official_disclaimer
     )

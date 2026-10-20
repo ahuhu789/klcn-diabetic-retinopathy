@@ -1,0 +1,5 @@
+model,weight,family,t5,thresholds,split
+vit3,0.45,hierarchical_ordinal,0.475,"0.95,1.45,2.70,3.15",val-locked
+effb4,0.4,hierarchical,0.475,,val-locked
+e_twohead,0.15,hierarchical_ordinal,0.675,"0.60,1.25,2.35,3.60",val-locked
+ensemble,1.0,hierarchical,0.5,,val-locked

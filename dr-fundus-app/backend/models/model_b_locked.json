@@ -1,25 +1,212 @@
 {
-  "kernel": "nguynhuythanh/klcn-retinal-6class-v2-hybrid-14ep-early",
-  "kernel_version": 4,
-  "label_table": "unified_6class_v2 in_primary=1",
-  "final_decode": "ensemble_threshold",
-  "threshold_adopted": true,
-  "ensemble_resnet_weight": 0.25,
-  "ensemble_vit_weight": 0.75,
-  "thresholds": [0.95, 1.35, 2.35, 3.15],
+  "version": "v3-3model",
+  "description": "Model B = weighted ensemble ViT-B/16-384 v3 + EfficientNet-B4-448 v3 + EfficientNet-B4-448 two-head (Phase E). v2 (ResNet-50 + ViT-B/16 256) removed.",
+  "label_table": "unified_6class_v2 in_primary=1 (nguynhuythanh/klcn-retinal-6class-unified-v2)",
+  "preprocess": {
+    "cache_kernel": "nguynhuythanh/klcn-retinal-6class-bengraham512-cache",
+    "ben_graham": {
+      "size": 512,
+      "sigma": 20.0,
+      "crop_tol": 10,
+      "circle": 0.95,
+      "fill": 128,
+      "jpeg_quality": 92
+    },
+    "branch_input": "torchvision Resize((s, s)) on the 512 PIL image, ToTensor, ImageNet mean/std",
+    "tta": "mean of probs of image and horizontal flip",
+    "weights": "EMA 0.999, best VAL SCORE epoch"
+  },
+  "classes": [
+    "0 No DR",
+    "1 Mild NPDR",
+    "2 Moderate NPDR",
+    "3 Severe NPDR",
+    "4 PDR",
+    "5 other (non-DR) disease"
+  ],
+  "metric_definitions": {
+    "qwk_dr": "quadratic kappa on true labels 0-4 with grade = argmax(p[:, :5])",
+    "score": "0.5 * macroF1_6 + 0.5 * QWK_DR"
+  },
+  "n_val": 8796,
   "n_test": 8818,
-  "checkpoints": {
-    "resnet": "resnet50_hybrid_ordinal_best_score.pth",
-    "vit": "vit_b16_hybrid_ordinal_best_score.pth"
+  "ensemble": {
+    "weights": {
+      "vit3": 0.45,
+      "effb4": 0.4,
+      "e_twohead": 0.15
+    },
+    "decode": {
+      "family": "hierarchical",
+      "t5": 0.5,
+      "thresholds": null
+    },
+    "selection": "VAL only: 231 simplex points (step 0.05) x Phase A decode search (argmax6 / hierarchical t5 grid 0.30-0.90 step 0.025 / hierarchical+ordinal thresholds within 0.02 VAL acc); TEST scored once",
+    "val": {
+      "acc": 0.7974,
+      "macro_f1": 0.6219,
+      "qwk_dr": 0.7592,
+      "score": 0.6906,
+      "eyepacs_qwk_dr": 0.7577
+    },
+    "test": {
+      "acc": 0.7936,
+      "macro_f1": 0.6151,
+      "qwk_dr": 0.7572,
+      "score": 0.6861,
+      "eyepacs_qwk_dr": 0.7552,
+      "score_ci95": [
+        0.6684,
+        0.7035
+      ],
+      "eyepacs_qwk_dr_ci95": [
+        0.7342,
+        0.7756
+      ],
+      "macro_f1_ci95": [
+        0.5943,
+        0.6352
+      ],
+      "qwk_dr_ci95": [
+        0.7373,
+        0.7764
+      ],
+      "f1_per_class": [
+        0.8857,
+        0.2218,
+        0.6348,
+        0.4942,
+        0.6288,
+        0.8251
+      ],
+      "false5": {
+        "EyePACS": [
+          0.001,
+          5,
+          5162
+        ],
+        "ODIR-5K": [
+          0.147,
+          87,
+          592
+        ],
+        "RFMiD": [
+          0.0746,
+          10,
+          134
+        ]
+      }
+    },
+    "paired_bootstrap_test_score": {
+      "M3-D3": {
+        "delta": -0.0006,
+        "ci95": [
+          -0.0043,
+          0.0034
+        ]
+      },
+      "M3-D2": {
+        "delta": 0.0125,
+        "ci95": [
+          0.0063,
+          0.0183
+        ]
+      }
+    },
+    "bootstrap": "patient-level, 1000 resamples",
+    "report": "d_3model.py (Phase D tooling) on the VAL/TEST probabilities written by the three training kernels; same probabilities as Kaggle kernel nguynhuythanh/klcn-retinal-6class-v3-d-ensemble v3"
   },
-  "test_argmax": {
-    "resnet": {"acc": 0.7037877069630302, "macro_f1": 0.5004725878281101, "qwk_dr": 0.4514340775041852, "score": 0.47595333266614764},
-    "vit": {"acc": 0.7496030845996825, "macro_f1": 0.5458685064367594, "qwk_dr": 0.5613862656824575, "score": 0.5536273860596085}
-  },
-  "test_ensemble_threshold": {
-    "acc": 0.6961896121569517,
-    "macro_f1": 0.5371438981750335,
-    "qwk_dr": 0.5842312978442641,
-    "score": 0.5606875980096488
-  }
+  "branches": [
+    {
+      "key": "vit3",
+      "label": "ViT-B/16-384 v3",
+      "arch": "vit_base_patch16_384.augreg_in21k_ft_in1k",
+      "kind": "softmax",
+      "img_size": 384,
+      "checkpoint": "vitb16_384_best.pth",
+      "kaggle_kernel": "nguynhuythanh/klcn-retinal-6class-v3-vitb16-384",
+      "kernel_version": "latest (output 2026-10-18)",
+      "weight": 0.45,
+      "decode": {
+        "family": "hierarchical_ordinal",
+        "t5": 0.475,
+        "thresholds": [
+          0.95,
+          1.45,
+          2.7,
+          3.15
+        ]
+      },
+      "test": {
+        "acc": 0.7506,
+        "macro_f1": 0.5983,
+        "qwk_dr": 0.703,
+        "score": 0.6507,
+        "score_ci95": [
+          0.6337,
+          0.669
+        ]
+      },
+      "sha256": "fc0166b384d15f9fa9e8d2d5078ba338ade138f49095c0e8400eecf5fa34a4f8"
+    },
+    {
+      "key": "effb4",
+      "label": "EfficientNet-B4-448 v3",
+      "arch": "tf_efficientnet_b4.ns_jft_in1k",
+      "kind": "softmax",
+      "img_size": 448,
+      "checkpoint": "effb4_448_best.pth",
+      "kaggle_kernel": "nguynhuythanh/klcn-retinal-6class-v3-effb4-448",
+      "kernel_version": "3",
+      "weight": 0.4,
+      "decode": {
+        "family": "hierarchical",
+        "t5": 0.475,
+        "thresholds": null
+      },
+      "test": {
+        "acc": 0.779,
+        "macro_f1": 0.5652,
+        "qwk_dr": 0.7206,
+        "score": 0.6429,
+        "score_ci95": [
+          0.6236,
+          0.6602
+        ]
+      },
+      "sha256": "3278fea41d4beb8e0d761bc9c601ebee0d3b5481a9eb20847a3da8ccab2502e2"
+    },
+    {
+      "key": "e_twohead",
+      "label": "EfficientNet-B4-448 two-head (Pha E)",
+      "arch": "tf_efficientnet_b4.ns_jft_in1k",
+      "kind": "twohead",
+      "img_size": 448,
+      "checkpoint": "effb4_448_twohead_best.pth",
+      "kaggle_kernel": "nguynhuythanh/klcn-retinal-6class-v3-e-twohead",
+      "kernel_version": "latest (output 2026-10-19)",
+      "weight": 0.15,
+      "decode": {
+        "family": "hierarchical_ordinal",
+        "t5": 0.675,
+        "thresholds": [
+          0.6,
+          1.25,
+          2.35,
+          3.6
+        ]
+      },
+      "test": {
+        "acc": 0.7612,
+        "macro_f1": 0.5563,
+        "qwk_dr": 0.7163,
+        "score": 0.6363,
+        "score_ci95": [
+          0.616,
+          0.6549
+        ]
+      },
+      "sha256": "4394e24738e3fd7f38b75500138fdc992ce622745b831653c328168d679d9cf9"
+    }
+  ]
 }

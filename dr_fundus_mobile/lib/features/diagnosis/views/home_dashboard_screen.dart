@@ -167,7 +167,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Model A trên máy (τ=0.965) • Model B trên server: ensemble 6 lớp, ResNet 0.25 và ViT 0.75.',
+                    'Model A trên máy (τ=0.965) • Model B trên server: ensemble 6 lớp ViT-B/16-384 0.45, EffB4-448 0.40, EffB4 hai đầu ra 0.15.',
                     style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
                   ),
                 ],

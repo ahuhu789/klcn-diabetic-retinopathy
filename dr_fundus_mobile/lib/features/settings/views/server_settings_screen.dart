@@ -213,7 +213,7 @@ class _ServerSettingsScreenState extends ConsumerState<ServerSettingsScreen> {
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(height: 6),
                   _buildModelStatusRow('Model A - MobileNetV3 Gate:', 'Ngưỡng an toàn τ = 0.965, chạy trên máy'),
-                  _buildModelStatusRow('Model B - Ensemble 6 lớp:', 'ResNet 0.25 / ViT 0.75, chạy trên server'),
+                  _buildModelStatusRow('Model B - Ensemble 6 lớp:', 'ViT 0.45 / EffB4 0.40 / EffB4 hai đầu ra 0.15, chạy trên server'),
                 ],
               ),
             ),

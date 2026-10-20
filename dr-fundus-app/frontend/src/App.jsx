@@ -31,6 +31,12 @@ const STAGE_COLORS = [
   '#64748b'
 ];
 
+const BRANCH_LABELS = {
+  vit3: 'ViT-B/16-384',
+  effb4: 'EfficientNet-B4-448',
+  e_twohead: 'EfficientNet-B4 hai đầu ra',
+};
+
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -122,13 +128,8 @@ export default function App() {
       const data = await response.json();
       setResult(data);
       
-      if (data.dr_result) {
-        setSelectedDRModel('ensemble');
-      } else if (data.dr_vit) {
-        setSelectedDRModel('vit');
-      } else {
-        setSelectedDRModel('resnet');
-      }
+      setSelectedDRModel('ensemble');
+      setActiveHeatmapView('ensemble');
       setDashboardTab('overview');
     } catch (err) {
       setError(err.message || "Đã xảy ra lỗi khi phân tích ảnh.");
@@ -137,13 +138,19 @@ export default function App() {
     }
   };
 
-  const currentDR = selectedDRModel === 'resnet' && result?.dr_resnet
-    ? result.dr_resnet
-    : selectedDRModel === 'vit' && result?.dr_vit
-    ? result.dr_vit
-    : (result?.dr_result || result?.dr_vit || result?.dr_resnet);
+  // Model B v3: ensemble + 3 branches (ViT-B/16-384, EffB4-448, EffB4-448 two-head).
+  const branches = (result?.dr_branches && result.dr_branches.length)
+    ? result.dr_branches
+    : [result?.dr_vit, result?.dr_effb4, result?.dr_twohead].filter(Boolean);
+  const branchLabel = (b) => BRANCH_LABELS[b?.branch] || b?.model_used || 'Nhánh';
+  const fmtWeight = (b) => (typeof b?.weight === 'number' ? b.weight.toFixed(2) : '?');
+  const selectedBranch = branches.find((b) => b.branch === selectedDRModel);
+  const currentDR = selectedDRModel !== 'ensemble' && selectedBranch
+    ? selectedBranch
+    : (result?.dr_result || branches[0]);
+  const heatmapBranch = branches.find((b) => b.branch === activeHeatmapView);
 
-  const isAgreement = result?.dr_resnet && result?.dr_vit && (result.dr_resnet.stage === result.dr_vit.stage);
+  const isAgreement = branches.length > 0 && result?.dr_result && branches.every((b) => b.stage === result.dr_result.stage);
 
   return (
     <div className="app-shell">
@@ -167,7 +174,7 @@ export default function App() {
             </div>
             <div className="badge-pipeline badge-b">
               <Activity size={14} />
-              <span>Model B: Ensemble 6 lớp (0.25 / 0.75)</span>
+              <span>Model B: Ensemble 3 mô hình (0.45 / 0.40 / 0.15)</span>
             </div>
           </div>
         </div>
@@ -179,7 +186,7 @@ export default function App() {
           <div className="hero-tag">Khóa Luận Tốt Nghiệp Đại Học • Hệ Thống AI Y Tế</div>
           <h1>Nghiên cứu Vision Transformer và phân loại <span>6 lớp ảnh đáy mắt</span></h1>
           <p>
-            Ảnh đi qua <strong>Model A (Fundus Gate, τ = 0.965)</strong> trên ảnh gốc. Nếu hợp lệ, <strong>Model B</strong> áp Ben Graham 256 rồi ensemble ResNet-50 (0.25) và ViT-B/16 (0.75). Lớp 0–4 là thang DR. Lớp 5 là nhóm tổn thương không phải DR, không phải tên một bệnh.
+            Ảnh đi qua <strong>Model A (Fundus Gate, τ = 0.965)</strong> trên ảnh gốc. Nếu hợp lệ, <strong>Model B</strong> áp Ben Graham 512 rồi ensemble ViT-B/16-384 (0.45), EfficientNet-B4-448 (0.40) và EfficientNet-B4-448 hai đầu ra (0.15). Lớp 0–4 là thang DR. Lớp 5 là nhóm tổn thương không phải DR, không phải tên một bệnh.
           </p>
         </div>
       </section>
@@ -383,7 +390,7 @@ export default function App() {
                 <div className="empty-feature-list">
                   <div className="feature-item">✓ Model A kiểm tra ảnh đáy mắt hợp lệ</div>
                   <div className="feature-item">✓ Model B phân loại 6 lớp sau tiền xử lý Ben Graham</div>
-                  <div className="feature-item">✓ Kết quả báo cáo là ensemble 0.25 ResNet + 0.75 ViT</div>
+                  <div className="feature-item">✓ Kết quả báo cáo là ensemble ViT 0.45 + EffB4 0.40 + EffB4 hai đầu ra 0.15</div>
                 </div>
               </div>
             )}
@@ -397,7 +404,7 @@ export default function App() {
                 <h4>Đang phân tích ảnh...</h4>
                 <p className="loading-step">
                   Giai đoạn 1: MobileNetV3 kiểm tra ảnh đáy mắt trên ảnh gốc...<br />
-                  Giai đoạn 2: Ben Graham 256, rồi ResNet-50 và ViT-B/16, rồi ensemble...
+                  Giai đoạn 2: Ben Graham 512, rồi ViT-B/16-384, EfficientNet-B4-448 và EfficientNet-B4 hai đầu ra, rồi ensemble...
                 </p>
               </div>
             )}
@@ -505,13 +512,14 @@ export default function App() {
 
                           <div className="summary-card model-b-summary">
                             <div className="summary-header">
-                              <span className="summary-tag tag-b">Hai nhánh trước khi trộn</span>
+                              <span className="summary-tag tag-b">Ba nhánh trước khi trộn</span>
                             </div>
                             <div className="summary-body">
-                              <h3 className="summary-title">ResNet 0.25 và ViT 0.75</h3>
+                              <h3 className="summary-title">ViT 0.45 • EffB4 0.40 • EffB4 hai đầu ra 0.15</h3>
                               <p className="summary-desc">
-                                ResNet-50: {result.dr_resnet ? result.dr_resnet.badge : "chưa có"}.
-                                {" "}ViT-B/16: {result.dr_vit ? result.dr_vit.badge : "chưa có"}.
+                                {branches.length
+                                  ? branches.map((b) => `${branchLabel(b)}: ${b.badge}`).join('. ')
+                                  : 'Chưa có kết quả từng nhánh'}.
                                 {" "}Lớp 5 chỉ có nghĩa là nhóm không phải DR.
                               </p>
                               {result.dr_result && (
@@ -553,17 +561,18 @@ export default function App() {
                         {currentDR ? (
                           <div>
                             {/* Agreement Banner */}
-                            {result.dr_resnet && result.dr_vit && (
+                            {branches.length > 0 && result.dr_result && (
                               <div className={`agreement-banner ${isAgreement ? 'agree-yes' : 'agree-diff'}`}>
                                 {isAgreement ? <CheckCircle2 size={18} className="flex-shrink-0" /> : <AlertTriangle size={18} className="flex-shrink-0" />}
                                 <div>
                                   <div>
-                                    <strong>Kết quả báo cáo là ensemble:</strong> lớp {result.dr_result?.stage} ({result.dr_result?.badge}).
-                                    ResNet-50: lớp {result.dr_resnet.stage} ({result.dr_resnet.badge}).
-                                    ViT-B/16: lớp {result.dr_vit.stage} ({result.dr_vit.badge}).
+                                    <strong>Kết quả báo cáo là ensemble:</strong> lớp {result.dr_result.stage} ({result.dr_result.badge}).
+                                    {branches.map((b) => (
+                                      <span key={b.branch || b.model_used}>{" "}{branchLabel(b)}: lớp {b.stage} ({b.badge}).</span>
+                                    ))}
                                     {isAgreement
-                                      ? " Hai nhánh trùng lớp."
-                                      : " Hai nhánh khác lớp. Ensemble là quyết định đã chọn trên tập validation."}
+                                      ? " Các nhánh trùng lớp với ensemble."
+                                      : " Các nhánh không hoàn toàn trùng lớp. Ensemble là quyết định đã khóa trên tập validation."}
                                   </div>
                                 </div>
                               </div>
@@ -582,80 +591,67 @@ export default function App() {
                                     className={`view-tab ${activeHeatmapView === 'ensemble' ? 'active' : ''}`}
                                     onClick={() => setActiveHeatmapView('ensemble')}
                                   >
-                                    Ensemble 0.25 / 0.75
+                                    Ensemble (trộn theo trọng số)
                                   </button>
                                 )}
-                                {result.dr_resnet?.heatmap_base64 && result.dr_vit?.heatmap_base64 && (
-                                  <button 
+                                {branches.filter((b) => b.heatmap_base64).length > 1 && (
+                                  <button
                                     className={`view-tab ${activeHeatmapView === 'compare' ? 'active' : ''}`}
                                     onClick={() => setActiveHeatmapView('compare')}
                                   >
-                                    👁️ So sánh 2 Heatmap song song
+                                    👁️ So sánh {branches.filter((b) => b.heatmap_base64).length} heatmap song song
                                   </button>
                                 )}
-                                {result.dr_vit?.heatmap_base64 && (
-                                  <button 
-                                    className={`view-tab ${activeHeatmapView === 'vit' ? 'active' : ''}`}
-                                    onClick={() => setActiveHeatmapView('vit')}
+                                {branches.filter((b) => b.heatmap_base64).map((b) => (
+                                  <button
+                                    key={b.branch}
+                                    className={`view-tab ${activeHeatmapView === b.branch ? 'active' : ''}`}
+                                    onClick={() => setActiveHeatmapView(b.branch)}
                                   >
-                                    ✨ ViT-B/16 (Transformer Attention)
+                                    {b.branch === 'vit3' ? '✨ ' : '⚡ '}{branchLabel(b)} ({fmtWeight(b)})
                                   </button>
-                                )}
-                                {result.dr_resnet?.heatmap_base64 && (
-                                  <button 
-                                    className={`view-tab ${activeHeatmapView === 'resnet' ? 'active' : ''}`}
-                                    onClick={() => setActiveHeatmapView('resnet')}
-                                  >
-                                    ⚡ ResNet-50 (CNN Grad-CAM)
-                                  </button>
-                                )}
-                                <button 
+                                ))}
+                                <button
                                   className={`view-tab ${activeHeatmapView === 'original' ? 'active' : ''}`}
                                   onClick={() => setActiveHeatmapView('original')}
                                 >
-                                  📷 Ảnh gốc (RGB 256x256)
+                                  📷 Ảnh gốc
                                 </button>
                               </div>
 
                               {/* View Content */}
-                              {activeHeatmapView === 'compare' && result.dr_resnet?.heatmap_base64 && result.dr_vit?.heatmap_base64 ? (
+                              {activeHeatmapView === 'compare' && branches.some((b) => b.heatmap_base64) ? (
                                 <div className="dual-heatmap-grid">
-                                  <div className="heatmap-box">
-                                    <div className="heatmap-title">ResNet-50 (CNN Grad-CAM)</div>
-                                    <img src={result.dr_resnet.heatmap_base64} alt="ResNet Heatmap" className="heatmap-img" />
-                                    <div className="heatmap-caption">Trọng tâm: Vùng vi phình mạch & xuất huyết cục bộ</div>
-                                    <div className={`stage-badge stage-${result.dr_resnet.stage}`}>
-                                      Độ {result.dr_resnet.stage}: {result.dr_resnet.badge}
+                                  {branches.filter((b) => b.heatmap_base64).map((b) => (
+                                    <div className="heatmap-box" key={b.branch}>
+                                      <div className="heatmap-title">{branchLabel(b)} • trọng số {fmtWeight(b)}</div>
+                                      <img src={b.heatmap_base64} alt={`${branchLabel(b)} heatmap`} className="heatmap-img" />
+                                      <div className="heatmap-caption">
+                                        {b.branch === 'vit3' ? 'Grad-CAM trên token patch của khối Transformer cuối' : 'Grad-CAM trên lớp tích chập cuối (bn2)'}
+                                      </div>
+                                      <div className={`stage-badge stage-${b.stage}`}>
+                                        Độ {b.stage}: {b.badge}
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="heatmap-box">
-                                    <div className="heatmap-title">ViT-B/16 (Transformer Attention)</div>
-                                    <img src={result.dr_vit.heatmap_base64} alt="ViT Heatmap" className="heatmap-img" />
-                                    <div className="heatmap-caption">Trọng tâm: Tương quan toàn võng mạc (Self-Attention)</div>
-                                    <div className={`stage-badge stage-${result.dr_vit.stage}`}>
-                                      Độ {result.dr_vit.stage}: {result.dr_vit.badge}
-                                    </div>
-                                  </div>
+                                  ))}
                                 </div>
                               ) : (
                                 <div className="single-heatmap-box">
-                                  <img 
+                                  <img
                                     src={
                                       activeHeatmapView === 'ensemble' && result.dr_result?.heatmap_base64
                                         ? result.dr_result.heatmap_base64
-                                        : activeHeatmapView === 'vit' && result.dr_vit?.heatmap_base64 
-                                        ? result.dr_vit.heatmap_base64 
-                                        : activeHeatmapView === 'resnet' && result.dr_resnet?.heatmap_base64
-                                        ? result.dr_resnet.heatmap_base64
+                                        : heatmapBranch?.heatmap_base64
+                                        ? heatmapBranch.heatmap_base64
                                         : previewUrl
-                                    } 
-                                    alt="Heatmap View" 
+                                    }
+                                    alt="Heatmap View"
                                     className="heatmap-img"
                                   />
                                 </div>
                               )}
                               <p className="heatmap-note">
-                                * Vùng màu đỏ/cam biểu thị khu vực các mạng nơ-ron tập trung trọng số kích hoạt khi đưa ra quyết định phân loại tổn thương.
+                                * Vùng màu đỏ/cam biểu thị khu vực các mạng nơ-ron tập trung trọng số kích hoạt khi đưa ra quyết định phân loại tổn thương. Grad-CAM của mọi nhánh lấy lớp do ensemble chọn; heatmap ensemble là tổng có trọng số 0.45 / 0.40 / 0.15.
                               </p>
                             </div>
 
@@ -668,27 +664,19 @@ export default function App() {
                                     onClick={() => setSelectedDRModel('ensemble')}
                                   >
                                     <Layers size={14} />
-                                    <span>Ensemble 0.25 / 0.75</span>
+                                    <span>Ensemble 0.45 / 0.40 / 0.15</span>
                                   </button>
                                 )}
-                                {result.dr_vit && (
-                                  <button 
-                                    className={`model-subtab ${selectedDRModel === 'vit' ? 'active' : ''}`}
-                                    onClick={() => setSelectedDRModel('vit')}
+                                {branches.map((b) => (
+                                  <button
+                                    key={b.branch}
+                                    className={`model-subtab ${selectedDRModel === b.branch ? 'active' : ''}`}
+                                    onClick={() => setSelectedDRModel(b.branch)}
                                   >
-                                    <Sparkles size={14} />
-                                    <span>Vision Transformer ViT-B/16</span>
+                                    {b.branch === 'vit3' ? <Sparkles size={14} /> : <Cpu size={14} />}
+                                    <span>{branchLabel(b)}</span>
                                   </button>
-                                )}
-                                {result.dr_resnet && (
-                                  <button 
-                                    className={`model-subtab ${selectedDRModel === 'resnet' ? 'active' : ''}`}
-                                    onClick={() => setSelectedDRModel('resnet')}
-                                  >
-                                    <Cpu size={14} />
-                                    <span>ResNet-50</span>
-                                  </button>
-                                )}
+                                ))}
                               </div>
 
                               <div className="dr-detail-header">
@@ -764,16 +752,16 @@ export default function App() {
                                 <strong>Model A</strong> nhìn ảnh gốc và chỉ quyết định ảnh có phải đáy mắt hay không. Ngưỡng giữ nguyên 0.965.
                               </li>
                               <li>
-                                <strong>Model B</strong> chỉ chạy khi Model A chấp nhận. Ảnh được cắt nền tối, resize 256, rồi Ben Graham (hệ số 4, Gaussian σ = 10, mặt nạ tròn 0.95) trước khi chuẩn hóa ImageNet.
+                                <strong>Model B</strong> chỉ chạy khi Model A chấp nhận. Ảnh được cắt nền tối, resize 512, rồi Ben Graham (hệ số 4, Gaussian σ = 20, mặt nạ tròn 0.95, JPEG q92) giống bộ cache huấn luyện; mỗi nhánh resize về 384 (ViT) hoặc 448 (EffB4), chuẩn hóa ImageNet và lấy trung bình với ảnh lật ngang (TTA).
                               </li>
                               <li>
-                                Xác suất ensemble = 0.25 × ResNet-50 + 0.75 × ViT-B/16. Nếu argmax là lớp 5, kết quả là lớp 5. Nếu không, mức DR là giá trị kỳ vọng của 5 lớp đầu, cắt bởi ngưỡng [0.95, 1.35, 2.35, 3.15].
+                                Xác suất ensemble = 0.45 × ViT-B/16-384 + 0.40 × EfficientNet-B4-448 + 0.15 × EfficientNet-B4-448 hai đầu ra. Giải mã phân tầng: nếu p(lớp 5) &gt; 0.50 thì kết quả là lớp 5; nếu không, mức DR là argmax của 5 lớp 0–4. Trọng số và t5 được khóa trên tập validation.
                               </li>
                               <li>
                                 Lớp 5 là một nhóm chung cho tổn thương không thuộc thang DR. Nó không nêu tên đục thủy tinh thể, glôcôm, AMD, cận thị bệnh lý hay tắc mạch.
                               </li>
                               <li>
-                                Số liệu test khóa trên 8818 ảnh: ensemble Acc 69.62%, macro-F1 0.5371, QWK 0.5842, SCORE 0.5607. Mild NPDR vẫn là lớp yếu.
+                                Số liệu test (8818 ảnh, chấm một lần sau khi khóa trên validation): Acc 79.36%, macro-F1 0.6151, QWK_DR 0.7572, SCORE 0.6861 (CI95 0.6684–0.7035). Mild NPDR vẫn là lớp yếu (F1 0.2218).
                               </li>
                             </ul>
                           </div>
@@ -809,7 +797,7 @@ export default function App() {
               <strong>Khóa luận Tốt nghiệp Đại học</strong> • Đề tài: Nghiên cứu Vision Transformer và ứng dụng phân loại mức độ bệnh võng mạc đái tháo đường từ ảnh đáy võng mạc mắt.
             </div>
             <div className="footer-sub">
-              Model A (MobileNetV3 Gate) • Model B (ensemble ResNet-50 0.25 và ViT-B/16 0.75, 6 lớp).
+              Model A (MobileNetV3 Gate) • Model B (ensemble ViT-B/16-384 0.45, EfficientNet-B4-448 0.40, EfficientNet-B4-448 hai đầu ra 0.15; 6 lớp).
             </div>
           </div>
         </div>

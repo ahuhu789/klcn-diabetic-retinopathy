@@ -8,5 +8,5 @@ numpy>=1.24.0
 pillow>=9.5.0
 matplotlib>=3.7.0
 pydantic>=2.0.0
-timm>=1.0.0
-opencv-python-headless>=4.8.0
+timm>=1.0.0  # vit_base_patch16_384.augreg_in21k_ft_in1k, tf_efficientnet_b4.ns_jft_in1k
+opencv-python-headless>=4.8.0,<5  # same 4.x line as the Kaggle cache kernel

@@ -17,8 +17,10 @@ env/
 venv/
 .venv/
 
-# Large model weights (auto-downloaded from Hugging Face Hub if missing)
+# Model B v3 checkpoints (vitb16_384_best.pth, effb4_448_best.pth, effb4_448_twohead_best.pth).
+# Never committed; download from the private Kaggle kernel outputs (see README.md).
 backend/models/*.pth
+*.pth
 
 # Logs & temp
 *.log
