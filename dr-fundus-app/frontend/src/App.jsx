@@ -20,7 +20,27 @@ import {
   BarChart3
 } from 'lucide-react';
 
-const API_BASE = '/api';
+// API origin. Default: the Hugging Face Space. Set VITE_API_URL="" to use the
+// same-origin /api (Vite dev proxy or FastAPI serving dist), or any other backend URL.
+const DEFAULT_API_URL = 'https://slyviee-klcn-diabetic-retinopathy.hf.space';
+const API_ORIGIN = (import.meta.env.VITE_API_URL ?? DEFAULT_API_URL).trim().replace(/\/+$/, '');
+const API_BASE = `${API_ORIGIN}/api`;
+const apiUrl = (path) => (path && path.startsWith('/') ? `${API_ORIGIN}${path}` : path);
+
+// CPU Space: a prediction takes ~6-10 s warm; after sleeping the Space needs
+// extra time to boot and load the 3 models, so allow a long timeout.
+const PREDICT_TIMEOUT_MS = 180000;
+const WAKING_HINT_AFTER_MS = 15000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const STAGE_COLORS = [
   '#10b981',
@@ -52,15 +72,33 @@ export default function App() {
   const [activeHeatmapView, setActiveHeatmapView] = useState('compare');
   const [selectedDRModel, setSelectedDRModel] = useState('ensemble');
   const fileInputRef = useRef(null);
+  // 'checking' | 'ready' | 'waking'
+  const [serverState, setServerState] = useState('checking');
+  const [wakingHint, setWakingHint] = useState(false);
 
-  // Load sample images on mount
+  // Wake the server (the free Space sleeps when idle), then load sample images.
   useEffect(() => {
-    fetch(`${API_BASE}/samples`)
-      .then(res => res.json())
-      .then(data => {
+    let cancelled = false;
+    let retryTimer = null;
+    const started = Date.now();
+    const tryConnect = async () => {
+      try {
+        const health = await fetchWithTimeout(`${API_BASE}/health`, {}, 20000);
+        if (!health.ok) throw new Error(`health ${health.status}`);
+        const res = await fetchWithTimeout(`${API_BASE}/samples`, {}, 20000);
+        const data = await res.json();
+        if (cancelled) return;
         if (Array.isArray(data)) setSamples(data);
-      })
-      .catch(err => console.error("Could not fetch samples:", err));
+        setServerState('ready');
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('API not reachable yet:', err);
+        setServerState('waking');
+        if (Date.now() - started < 5 * 60 * 1000) retryTimer = setTimeout(tryConnect, 10000);
+      }
+    };
+    tryConnect();
+    return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
   }, []);
 
   const handleFileChange = (e) => {
@@ -83,7 +121,7 @@ export default function App() {
     try {
       setLoading(true);
       setActiveSampleInfo(sample);
-      const res = await fetch(sample.url);
+      const res = await fetchWithTimeout(apiUrl(sample.url), {}, 60000);
       const blob = await res.blob();
       const file = new File([blob], sample.filename, { type: 'image/jpeg' });
       processFile(file);
@@ -114,11 +152,13 @@ export default function App() {
     const formData = new FormData();
     formData.append('file', selectedFile);
 
+    setWakingHint(false);
+    const hintTimer = setTimeout(() => setWakingHint(true), WAKING_HINT_AFTER_MS);
     try {
-      const response = await fetch(`${API_BASE}/predict`, {
+      const response = await fetchWithTimeout(`${API_BASE}/predict`, {
         method: 'POST',
         body: formData,
-      });
+      }, PREDICT_TIMEOUT_MS);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -131,9 +171,18 @@ export default function App() {
       setSelectedDRModel('ensemble');
       setActiveHeatmapView('ensemble');
       setDashboardTab('overview');
+      setServerState('ready');
     } catch (err) {
-      setError(err.message || "Đã xảy ra lỗi khi phân tích ảnh.");
+      if (err.name === 'AbortError') {
+        setError("Máy chủ phản hồi quá lâu (quá " + Math.round(PREDICT_TIMEOUT_MS / 1000) + " giây). Máy chủ có thể đang khởi động lại, vui lòng thử lại sau ít phút.");
+      } else if (err instanceof TypeError) {
+        setError("Không kết nối được máy chủ AI. Máy chủ có thể đang khởi động (Hugging Face Space ngủ khi không dùng), vui lòng chờ 1-2 phút rồi thử lại.");
+      } else {
+        setError(err.message || "Đã xảy ra lỗi khi phân tích ảnh.");
+      }
     } finally {
+      clearTimeout(hintTimer);
+      setWakingHint(false);
       setLoading(false);
     }
   };
@@ -294,7 +343,7 @@ export default function App() {
                       >
                         <div className="sample-thumb-wrapper">
                           <img 
-                            src={s.url} 
+                            src={apiUrl(s.url)} 
                             alt={s.filename} 
                             className="sample-thumb"
                           />
@@ -342,6 +391,15 @@ export default function App() {
                 </>
               )}
             </button>
+
+            {serverState === 'waking' && !error && (
+              <div className="alert-error">
+                <RefreshCw size={18} className="flex-shrink-0" />
+                <div>
+                  <strong>Máy chủ đang khởi động...</strong> Máy chủ AI (Hugging Face Space) ngủ khi không có người dùng và cần 1-2 phút để nạp lại 3 mô hình. Trang sẽ tự kết nối lại.
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="alert-error">
@@ -406,6 +464,11 @@ export default function App() {
                   Giai đoạn 1: MobileNetV3 kiểm tra ảnh đáy mắt trên ảnh gốc...<br />
                   Giai đoạn 2: Ben Graham 512, rồi ViT-B/16-384, EfficientNet-B4-448 và EfficientNet-B4 hai đầu ra, rồi ensemble...
                 </p>
+                {wakingHint && (
+                  <p className="loading-step">
+                    <strong>Máy chủ đang khởi động hoặc đang bận.</strong> Máy chủ chạy CPU miễn phí nên lần đầu có thể mất 1-2 phút, vui lòng chờ...
+                  </p>
+                )}
               </div>
             )}
 

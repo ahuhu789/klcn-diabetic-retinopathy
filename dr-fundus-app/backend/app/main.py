@@ -16,13 +16,20 @@ app = FastAPI(
     version="3.0.0"
 )
 
-# CORS configuration
+# CORS configuration.
+# The API is public (no auth, no cookies), so the default allows every origin
+# (Vercel production + *.vercel.app previews, localhost dev, Flutter web).
+# Set CORS_ORIGINS="https://a.example,https://b.example" to restrict it.
+_cors_env = os.environ.get("CORS_ORIGINS", "*").strip()
+_cors_origins = ["*"] if _cors_env in ("", "*") else [o.strip() for o in _cors_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=_cors_origins,
+    allow_origin_regex=None if _cors_origins == ["*"] else r"https://.*\.vercel\.app|http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    max_age=86400,
 )
 
 # Paths
@@ -336,6 +343,15 @@ from fastapi.staticfiles import StaticFiles
 FRONTEND_DIST = os.path.join(os.path.dirname(BASE_DIR), "frontend", "dist")
 if os.path.exists(FRONTEND_DIST):
     app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="static")
+else:
+    # API-only deployment (e.g. Hugging Face Space): answer "/" with a small index.
+    @app.get("/")
+    def root_index():
+        return {
+            "service": app.title,
+            "version": app.version,
+            "endpoints": ["/api/health", "/api/samples", "/api/samples/{filename}", "/api/predict", "/docs"],
+        }
 
 if __name__ == "__main__":
     import uvicorn

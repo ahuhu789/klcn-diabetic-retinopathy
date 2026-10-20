@@ -1,0 +1,12 @@
+# Same versions as the local backend venv used for the 52-image Kaggle consistency check.
+# torch / torchvision come from the CPU wheel index (see Dockerfile).
+fastapi==0.151.0
+uvicorn==0.54.0
+python-multipart==0.0.32
+ai-edge-litert==2.3.0
+numpy==2.5.2
+pillow==12.3.0
+matplotlib==3.11.2
+pydantic==2.14.1
+timm==1.0.30
+opencv-python-headless==4.14.0.94
