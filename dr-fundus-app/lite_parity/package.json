@@ -1,0 +1,14 @@
+{
+  "name": "dr-lite-parity",
+  "private": true,
+  "type": "module",
+  "description": "Parity checks: web Lite JS preprocessing/decode + ONNX student vs the Python reference",
+  "scripts": {
+    "test:decode": "node decode_parity.mjs ref.json",
+    "test:node": "node node_parity.mjs"
+  },
+  "dependencies": {
+    "onnxruntime-node": "^1.20.0",
+    "sharp": "^0.33.5"
+  }
+}

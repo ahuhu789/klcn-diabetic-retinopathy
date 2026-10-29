@@ -8,6 +8,7 @@ import '../../settings/views/server_settings_screen.dart';
 import '../controllers/diagnosis_controller.dart';
 import '../widgets/sample_carousel.dart';
 import 'result_screen.dart';
+import '../../../core/services/lite_inference_service.dart';
 
 class HomeDashboardScreen extends ConsumerWidget {
   const HomeDashboardScreen({super.key});
@@ -17,6 +18,7 @@ class HomeDashboardScreen extends ConsumerWidget {
     final state = ref.watch(diagnosisProvider);
     final notifier = ref.read(diagnosisProvider.notifier);
     final settingsState = ref.watch(settingsProvider);
+    final isLite = state.isLite;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -25,23 +27,40 @@ class HomeDashboardScreen extends ConsumerWidget {
         elevation: 0.5,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text(
-              'RetinaGuard Mobile',
+              isLite ? 'RetinaGuard • Lite (offline)' : 'RetinaGuard • API (ensemble)',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
             ),
-            Text(
+            const Text(
               'Sàng lọc & Phân độ Võng mạc Đáy mắt (KLCN HUIT)',
               style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
             ),
           ],
         ),
         actions: [
-          // Network Connection Status Pill
+          // Network Connection Status Pill (tab Lite không cần mạng)
+          if (isLite)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.successLight,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.offline_bolt, size: 12, color: AppColors.success),
+                  SizedBox(width: 4),
+                  Text('Offline', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.success)),
+                ],
+              ),
+            )
+          else
           GestureDetector(
             onTap: () {
               Navigator.of(context).push(
@@ -166,10 +185,26 @@ class HomeDashboardScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Model A trên máy (τ=0.965) • Model B trên server: ensemble 6 lớp ViT-B/16-384 0.45, EffB4-448 0.40, EffB4 hai đầu ra 0.15.',
-                    style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
+                  Text(
+                    isLite
+                        ? 'Model A trên máy (τ=0.965) • Model B Lite trên máy: student EfficientNet-B4-448 hai đầu ra (TFLite fp16, chưng cất từ ensemble). Không cần mạng.'
+                        : 'Model A trên máy (τ=0.965) • Model B trên server: ensemble 6 lớp ViT-B/16-384 0.45, EffB4-448 0.40, EffB4 hai đầu ra 0.15.',
+                    style: const TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
                   ),
+                  if (isLite) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        '${LiteInferenceService.testNote} Không có Grad-CAM. Muốn kết quả ensemble và bản đồ nhiệt, chọn tab API ở thanh dưới.',
+                        style: TextStyle(color: Colors.amberAccent, fontSize: 10.5, height: 1.35),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -344,18 +379,20 @@ class HomeDashboardScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          'Đang chạy Model A và ensemble B (${(state.uploadProgress * 100).toInt()}%)...',
+                          isLite
+                              ? 'Đang chạy mô hình Lite trên máy (${(state.uploadProgress * 100).toInt()}%)...'
+                              : 'Đang chạy Model A và ensemble B (${(state.uploadProgress * 100).toInt()}%)...',
                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ],
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.analytics_outlined, size: 20),
-                        SizedBox(width: 8),
+                      children: [
+                        Icon(isLite ? Icons.offline_bolt : Icons.analytics_outlined, size: 20),
+                        const SizedBox(width: 8),
                         Text(
-                          'Phân tích Toàn diện (Model A + Ensemble B)',
+                          isLite ? 'Phân tích Offline (Model A + Lite)' : 'Phân tích Toàn diện (Model A + Ensemble B)',
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                       ],

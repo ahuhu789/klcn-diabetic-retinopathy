@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
@@ -8,6 +9,7 @@ import '../widgets/model_a_gate_badge.dart';
 import '../widgets/dr_stage_card.dart';
 import '../widgets/dual_gradcam_viewer.dart';
 import '../../../models/prediction_response.dart';
+import '../../../core/services/lite_inference_service.dart';
 
 class ResultScreen extends ConsumerWidget {
   const ResultScreen({super.key});
@@ -140,7 +142,7 @@ class ResultScreen extends ConsumerWidget {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(14),
-                child: _buildTabContent(state.dashboardTab, res),
+                child: _buildTabContent(state.dashboardTab, res, state),
               ),
             ),
           ],
@@ -186,13 +188,70 @@ class ResultScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTabContent(int tabIndex, PredictionResponse res) {
+  Widget _liteNote() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F9FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFBAE6FD)),
+      ),
+      child: const Text(
+        'Kết quả từ mô hình Lite (offline). ${LiteInferenceService.testNote}',
+        style: TextStyle(fontSize: 11, height: 1.4, color: Color(0xFF075985)),
+      ),
+    );
+  }
+
+  Widget _litePreprocessed(DiagnosisState state) {
+    Widget box(String title, Uint8List? bytes) => Expanded(
+          child: Column(
+            children: [
+              Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              if (bytes != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(bytes, fit: BoxFit.cover, height: 150),
+                ),
+            ],
+          ),
+        );
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            box('Ảnh gốc', state.imageBytes),
+            const SizedBox(width: 10),
+            box('Ben Graham 512 (đầu vào Lite)', state.preprocessedBytes),
+          ]),
+          const SizedBox(height: 8),
+          const Text(
+            'Chế độ Lite không tính Grad-CAM để giữ nhẹ. Chọn tab API để xem bản đồ nhiệt.',
+            style: TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabContent(int tabIndex, PredictionResponse res, DiagnosisState state) {
     switch (tabIndex) {
       case 0:
         // Tab 0: Tổng quan Chẩn đoán
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (state.isLite) _liteNote(),
             ModelAGateBadge(
               isFundus: res.isFundus,
               confidence: res.fundusConfidence,
@@ -220,7 +279,7 @@ class ResultScreen extends ConsumerWidget {
                 branches: res.branches,
               ),
             const SizedBox(height: 14),
-            const DualGradCamViewer(),
+            if (state.isLite) _litePreprocessed(state) else const DualGradCamViewer(),
           ],
         );
 
@@ -230,6 +289,14 @@ class ResultScreen extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (state.isLite) ...[
+              _liteNote(),
+              const Text(
+                'Lite: Model A và student EfficientNet-B4-448 hai đầu ra chạy trên máy (TFLite fp16). Tiền xử lý giống server: Ben Graham 512, JPEG q92, resize 448, chuẩn hóa ImageNet, TTA lật ngang. Giải mã hier_ext: p1 × 1.5 rồi chuẩn hóa; lớp 5 nếu p5 > 0.45, nhưng nếu mức DR cao nhất là 0 thì cần p5 > 0.75. Xác suất hiển thị là xác suất sau khi nhân trọng số lớp 1.',
+                style: TextStyle(fontSize: 11, height: 1.4, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 12),
+            ],
             // Decoupling Rationale Card
             Container(
               padding: const EdgeInsets.all(14),

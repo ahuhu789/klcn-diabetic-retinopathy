@@ -17,8 +17,11 @@ import {
   FileText,
   AlertCircle,
   HelpCircle,
-  BarChart3
+  BarChart3,
+  Cloud,
+  Smartphone
 } from 'lucide-react';
+import { predictLite, isLiteCached, LITE_TEST_NOTE, LITE_MODEL_URL } from './lite/liteModel.js';
 
 // API origin. Default: the Hugging Face Space. Set VITE_API_URL="" to use the
 // same-origin /api (Vite dev proxy or FastAPI serving dist), or any other backend URL.
@@ -75,6 +78,20 @@ export default function App() {
   // 'checking' | 'ready' | 'waking'
   const [serverState, setServerState] = useState('checking');
   const [wakingHint, setWakingHint] = useState(false);
+  // Inference mode: 'api' = 3-model ensemble on the HF Space, 'lite' = distilled student in the browser.
+  const [mode, setModeState] = useState(() => {
+    try { return localStorage.getItem('dr-mode') === 'lite' ? 'lite' : 'api'; } catch { return 'api'; }
+  });
+  const [liteProgress, setLiteProgress] = useState(null);
+  const [liteCached, setLiteCached] = useState(false);
+  const isLite = mode === 'lite';
+  const setMode = (m) => {
+    setModeState(m);
+    try { localStorage.setItem('dr-mode', m); } catch { /* ignore */ }
+    setResult(null);
+    setError(null);
+  };
+  useEffect(() => { isLiteCached().then(setLiteCached); }, [mode]);
 
   // Wake the server (the free Space sleeps when idle), then load sample images.
   useEffect(() => {
@@ -152,6 +169,25 @@ export default function App() {
     const formData = new FormData();
     formData.append('file', selectedFile);
 
+    if (isLite) {
+      setLiteProgress({ stage: 'gate', fraction: 0 });
+      try {
+        const data = await predictLite(selectedFile, (p) => setLiteProgress(p));
+        setResult(data);
+        setLiteCached(true);
+        setSelectedDRModel('ensemble');
+        setActiveHeatmapView('original');
+        setDashboardTab('overview');
+      } catch (err) {
+        console.error(err);
+        setError("Mô hình Lite lỗi: " + (err?.message || String(err)) + ". Bạn có thể chuyển sang chế độ API.");
+      } finally {
+        setLiteProgress(null);
+        setLoading(false);
+      }
+      return;
+    }
+
     setWakingHint(false);
     const hintTimer = setTimeout(() => setWakingHint(true), WAKING_HINT_AFTER_MS);
     try {
@@ -223,7 +259,7 @@ export default function App() {
             </div>
             <div className="badge-pipeline badge-b">
               <Activity size={14} />
-              <span>Model B: Ensemble 3 mô hình (0.45 / 0.40 / 0.15)</span>
+              <span>{isLite ? 'Model B: Lite student (trên trình duyệt)' : 'Model B: Ensemble 3 mô hình (0.45 / 0.40 / 0.15)'}</span>
             </div>
           </div>
         </div>
@@ -373,6 +409,31 @@ export default function App() {
               </div>
             )}
 
+            {/* Inference mode: API (ensemble on server) or Lite (student in the browser) */}
+            <div className="mode-switch" role="radiogroup" aria-label="Chế độ suy luận">
+              <button type="button" role="radio" aria-checked={!isLite}
+                className={`mode-btn ${!isLite ? 'mode-active' : ''}`} onClick={() => setMode('api')} disabled={loading}>
+                <Cloud size={15} />
+                <span><strong>API</strong> • Ensemble 3 mô hình (máy chủ)</span>
+              </button>
+              <button type="button" role="radio" aria-checked={isLite}
+                className={`mode-btn ${isLite ? 'mode-active' : ''}`} onClick={() => setMode('lite')} disabled={loading}>
+                <Smartphone size={15} />
+                <span><strong>Lite</strong> • Chạy trên trình duyệt (offline)</span>
+              </button>
+            </div>
+            {isLite && (
+              <div className="lite-note">
+                <Info size={14} className="flex-shrink-0" />
+                <div>
+                  {LITE_TEST_NOTE} Không có Grad-CAM.{' '}
+                  {liteCached
+                    ? 'Mô hình đã được lưu trong trình duyệt.'
+                    : 'Lần đầu sẽ tải ~74 MB (student ONNX fp32 70 MB + cổng 3.8 MB), sau đó dùng lại từ bộ nhớ đệm.'}
+                </div>
+              </div>
+            )}
+
             {/* Action CTA Button */}
             <button 
               className="btn-analyze"
@@ -382,17 +443,17 @@ export default function App() {
               {loading ? (
                 <>
                   <div className="spinner"></div>
-                  <span>Đang thực thi Models A + B + C song song...</span>
+                  <span>{isLite ? 'Đang chạy mô hình Lite trên trình duyệt...' : 'Đang thực thi Models A + B + C song song...'}</span>
                 </>
               ) : (
                 <>
                   <Activity size={18} />
-                  <span>Phân tích Toàn diện (Models A + B + C)</span>
+                  <span>{isLite ? 'Phân tích bằng mô hình Lite (offline)' : 'Phân tích Toàn diện (Models A + B + C)'}</span>
                 </>
               )}
             </button>
 
-            {serverState === 'waking' && !error && (
+            {!isLite && serverState === 'waking' && !error && (
               <div className="alert-error">
                 <RefreshCw size={18} className="flex-shrink-0" />
                 <div>
@@ -460,11 +521,20 @@ export default function App() {
                   <div className="spinner-large"></div>
                 </div>
                 <h4>Đang phân tích ảnh...</h4>
+                {isLite ? (
+                  <p className="loading-step">
+                    {liteProgress && liteProgress.stage !== 'init' && liteProgress.fraction < 1
+                      ? <>Đang tải {liteProgress.stage === 'gate' ? 'cổng Model A' : 'mô hình Lite'}: <strong>{Math.round(liteProgress.fraction * 100)}%</strong><br /></>
+                      : null}
+                    Model A (MobileNetV3) trên ảnh gốc, rồi Ben Graham 512 và student EfficientNet-B4-448 (TTA lật ngang) ngay trên trình duyệt...
+                  </p>
+                ) : (
                 <p className="loading-step">
                   Giai đoạn 1: MobileNetV3 kiểm tra ảnh đáy mắt trên ảnh gốc...<br />
                   Giai đoạn 2: Ben Graham 512, rồi ViT-B/16-384, EfficientNet-B4-448 và EfficientNet-B4 hai đầu ra, rồi ensemble...
                 </p>
-                {wakingHint && (
+                )}
+                {!isLite && wakingHint && (
                   <p className="loading-step">
                     <strong>Máy chủ đang khởi động hoặc đang bận.</strong> Máy chủ chạy CPU miễn phí nên lần đầu có thể mất 1-2 phút, vui lòng chờ...
                   </p>
@@ -475,6 +545,12 @@ export default function App() {
             {/* State: Results Available */}
             {result && (
               <div className="results-container">
+                {result.mode === 'lite' && (
+                  <div className="lite-note lite-result-note">
+                    <Smartphone size={16} className="flex-shrink-0" />
+                    <div><strong>Kết quả từ mô hình Lite (offline).</strong> {LITE_TEST_NOTE} Muốn kết quả ensemble và Grad-CAM, chọn chế độ API.</div>
+                  </div>
+                )}
                 {/* Stage 1: Fundus Gate Rejection or Pass Banner */}
                 <div className={`gate-banner ${result.is_fundus ? 'gate-pass' : 'gate-reject'}`}>
                   <div className="gate-icon-col">
@@ -528,7 +604,7 @@ export default function App() {
                         onClick={() => setDashboardTab('model_b')}
                       >
                         <Activity size={15} />
-                        <span>Model B: 6 lớp & XAI</span>
+                        <span>{result.mode === 'lite' ? 'Model B: 6 lớp (Lite)' : 'Model B: 6 lớp & XAI'}</span>
                       </button>
                       <button 
                         className={`dash-tab ${dashboardTab === 'explanation' ? 'active' : ''}`}
@@ -546,7 +622,7 @@ export default function App() {
                           {/* Card 1: DR Staging (Model B) */}
                           <div className="summary-card model-b-summary">
                             <div className="summary-header">
-                              <span className="summary-tag tag-b">Kết quả báo cáo • Ensemble</span>
+                              <span className="summary-tag tag-b">{result.mode === 'lite' ? 'Kết quả báo cáo • Lite (student)' : 'Kết quả báo cáo • Ensemble'}</span>
                               {result.dr_result && (
                                 <span className={`stage-badge stage-${result.dr_result.stage}`}>
                                   {result.dr_result.badge}
@@ -573,6 +649,28 @@ export default function App() {
                             </button>
                           </div>
 
+                          {result.mode === 'lite' ? (
+                          <div className="summary-card model-b-summary">
+                            <div className="summary-header">
+                              <span className="summary-tag tag-b">Mô hình Lite</span>
+                            </div>
+                            <div className="summary-body">
+                              <h3 className="summary-title">EfficientNet-B4-448 hai đầu ra (chưng cất)</h3>
+                              <p className="summary-desc">
+                                Giải mã hier_ext: xác suất lớp 1 × 1.5 rồi chuẩn hóa; lớp 5 nếu p5 &gt; 0.45, nhưng khi mức DR cao nhất là 0 thì cần p5 &gt; 0.75. Lớp 5 chỉ có nghĩa là nhóm không phải DR.
+                              </p>
+                              {result.dr_result && (
+                                <div className="summary-confidence">
+                                  <span>TEST SCORE 0.6820 (ensemble API 0.6861)</span>
+                                </div>
+                              )}
+                            </div>
+                            <button className="btn-card-link" onClick={() => setDashboardTab('model_b')}>
+                              <span>Xem 6 lớp</span>
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                          ) : (
                           <div className="summary-card model-b-summary">
                             <div className="summary-header">
                               <span className="summary-tag tag-b">Ba nhánh trước khi trộn</span>
@@ -596,6 +694,7 @@ export default function App() {
                               <ChevronRight size={14} />
                             </button>
                           </div>
+                          )}
                         </div>
 
                         {/* Pipeline Status Breakdown Box */}
@@ -610,7 +709,7 @@ export default function App() {
                               <span className="col-val val-green">✓ {result.model_status?.model_a || 'ready'}</span>
                             </div>
                             <div className="status-col">
-                              <span className="col-label">Model B (ensemble 6 lớp):</span>
+                              <span className="col-label">{result.mode === 'lite' ? 'Model B (Lite student 6 lớp):' : 'Model B (ensemble 6 lớp):'}</span>
                               <span className="col-val val-green">✓ {result.model_status?.model_b || 'ready'}</span>
                             </div>
                           </div>
@@ -641,7 +740,30 @@ export default function App() {
                               </div>
                             )}
 
+                            {result.mode === 'lite' && (
+                              <div className="heatmap-section">
+                                <div className="section-label">
+                                  <Eye size={14} />
+                                  <span>Ảnh sau tiền xử lý Ben Graham 512 (đầu vào của mô hình Lite)</span>
+                                </div>
+                                <div className="dual-heatmap-grid">
+                                  <div className="heatmap-box">
+                                    <div className="heatmap-title">Ảnh gốc</div>
+                                    <img src={previewUrl} alt="Ảnh gốc" className="heatmap-img" />
+                                  </div>
+                                  {result.dr_result?.preprocessed_base64 && (
+                                    <div className="heatmap-box">
+                                      <div className="heatmap-title">Ben Graham 512</div>
+                                      <img src={result.dr_result.preprocessed_base64} alt="Ben Graham" className="heatmap-img" />
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="heatmap-note">* Chế độ Lite không tính Grad-CAM để giữ nhẹ. Chọn chế độ API để xem bản đồ nhiệt.</p>
+                              </div>
+                            )}
+
                             {/* Heatmap Selector & Viewer */}
+                            {result.mode !== 'lite' && (
                             <div className="heatmap-section">
                               <div className="section-label">
                                 <Sparkles size={14} />
@@ -717,6 +839,7 @@ export default function App() {
                                 * Vùng màu đỏ/cam biểu thị khu vực các mạng nơ-ron tập trung trọng số kích hoạt khi đưa ra quyết định phân loại tổn thương. Grad-CAM của mọi nhánh lấy lớp do ensemble chọn; heatmap ensemble là tổng có trọng số 0.45 / 0.40 / 0.15.
                               </p>
                             </div>
+                            )}
 
                             {/* Model Details Selector */}
                             <div className="model-details-card">
@@ -727,7 +850,7 @@ export default function App() {
                                     onClick={() => setSelectedDRModel('ensemble')}
                                   >
                                     <Layers size={14} />
-                                    <span>Ensemble 0.45 / 0.40 / 0.15</span>
+                                    <span>{result.mode === 'lite' ? 'Lite student' : 'Ensemble 0.45 / 0.40 / 0.15'}</span>
                                   </button>
                                 )}
                                 {branches.map((b) => (

@@ -37,6 +37,7 @@ dependencies:
   onnxruntime: ^1.4.1
 
   image: ^4.2.0
+  tflite_flutter: ^0.12.1
 
 dev_dependencies:
   flutter_test:

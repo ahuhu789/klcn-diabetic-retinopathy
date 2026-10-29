@@ -134,3 +134,17 @@ Bộ test kiểm tra:
 - Khả năng xử lý phản hồi từ chối an toàn của Model A Gate (ngưỡng 0.965).
 - Khả năng parse danh mục 10 ảnh mẫu có tag và danh mục.
 - Khả năng serialize / deserialize hồ sơ khám bệnh nhân.
+
+## Hai tab: API và Lite (offline)
+
+Thanh điều hướng dưới có hai tab, mỗi tab có luồng chọn/chụp ảnh và màn hình kết quả riêng:
+
+* **API (ensemble)**: như trước, Model A chạy trên máy, Model B (ensemble ViT 0.45 + EffB4 0.40 + EffB4 hai đầu ra 0.15) chạy trên server/HF Space, có Grad-CAM.
+* **Lite (offline)**: Model A và mô hình student EfficientNet-B4-448 hai đầu ra (chưng cất từ ensemble, TFLite fp16 35.2 MB) chạy hoàn toàn trên điện thoại bằng `tflite_flutter`, không cần mạng, không có Grad-CAM. TEST SCORE 0.6820 so với ensemble 0.6861.
+  Tiền xử lý và giải mã giống hệt Python (Ben Graham 512, JPEG q92, resize 448, TTA lật ngang, decode hier_ext w1 1.5 / t5 0.45 / t5n 0.75), xem `lib/core/lite/` và `../dr-fundus-app/lite_parity/README.md`.
+
+File mô hình `assets/models/student_effb4_twohead_448_fp16.tflite` đã nằm trong repo (35 MB, dưới giới hạn GitHub), nên `flutter run` / `flutter build apk` chạy ngay. Bản sao cũng có trên Hugging Face: `https://huggingface.co/slyviee/klcn-dr-student-lite/resolve/main/student_effb4_twohead_448_fp16.tflite`.
+
+`android/gradle.properties` đặt `kotlin.jvm.target.validation.mode=warning` vì plugin `tflite_flutter` biên dịch Java 11 còn Kotlin 17.
+
+Kiểm thử: `flutter test` (gồm `test/lite_decode_test.dart` so khớp decode với Python và `test/lite_tab_test.dart` cho hai tab).

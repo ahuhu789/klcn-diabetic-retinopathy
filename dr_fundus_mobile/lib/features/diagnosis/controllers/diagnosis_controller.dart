@@ -11,6 +11,10 @@ import '../../../models/screening_history_item.dart';
 import '../../history/controllers/history_controller.dart';
 import '../../settings/controllers/settings_controller.dart';
 import '../../../core/services/local_inference_service.dart';
+import '../../../core/services/lite_inference_service.dart';
+
+/// API = ensemble 3 mô hình trên server (HF Space). Lite = student TFLite chạy offline trên máy.
+enum InferenceMode { api, lite }
 
 class DiagnosisState {
   final File? selectedFile;
@@ -26,6 +30,11 @@ class DiagnosisState {
   final int dashboardTab;
   final double blendOpacity;
   final String activeGradCamModel; // 'ensemble', 'vit3', 'effb4' hoặc 'e_twohead'
+  final InferenceMode mode;
+  /// Lite: ảnh Ben Graham 512 (JPEG) đã đưa vào mô hình, để hiển thị thay cho Grad-CAM.
+  final Uint8List? preprocessedBytes;
+
+  bool get isLite => mode == InferenceMode.lite;
 
   DiagnosisState({
     this.selectedFile,
@@ -41,6 +50,8 @@ class DiagnosisState {
     this.dashboardTab = 0,
     this.blendOpacity = 0.65,
     this.activeGradCamModel = 'ensemble',
+    this.mode = InferenceMode.api,
+    this.preprocessedBytes,
   });
 
   DiagnosisState copyWith({
@@ -57,6 +68,7 @@ class DiagnosisState {
     int? dashboardTab,
     double? blendOpacity,
     String? activeGradCamModel,
+    Uint8List? preprocessedBytes,
     bool clearFile = false,
     bool clearSample = false,
     bool clearResult = false,
@@ -75,6 +87,8 @@ class DiagnosisState {
       dashboardTab: dashboardTab ?? this.dashboardTab,
       blendOpacity: blendOpacity ?? this.blendOpacity,
       activeGradCamModel: activeGradCamModel ?? this.activeGradCamModel,
+      mode: mode,
+      preprocessedBytes: clearResult ? preprocessedBytes : (preprocessedBytes ?? this.preprocessedBytes),
     );
   }
 }
@@ -84,8 +98,10 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
   final Ref _ref;
   final ImagePicker _picker = ImagePicker();
 
-  DiagnosisNotifier(this._apiClient, this._ref)
-      : super(DiagnosisState(samples: ClinicalSamples.all));
+  final InferenceMode mode;
+
+  DiagnosisNotifier(this._apiClient, this._ref, {this.mode = InferenceMode.api})
+      : super(DiagnosisState(samples: ClinicalSamples.all, mode: mode));
 
   void setSampleFilter(String filter) {
     state = state.copyWith(sampleFilter: filter);
@@ -207,8 +223,41 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
         return;
       }
 
-      // 2. GỬI LÊN SERVER ĐỂ CHẠY ENSEMBLE 6 LỚP (MODEL B)
+      // 2a. LITE: CHẠY STUDENT TFLITE OFFLINE TRÊN ĐIỆN THOẠI
       PredictionResponse res;
+      if (mode == InferenceMode.lite) {
+        state = state.copyWith(uploadProgress: 0.4);
+        final sw = Stopwatch()..start();
+        try {
+          final lite = await LiteInferenceService().predict(state.imageBytes!);
+          sw.stop();
+          res = PredictionResponse(
+            isFundus: true,
+            fundusConfidence: gateRes.confidence,
+            threshold: gateRes.threshold,
+            message: '${gateRes.message}. Đã chạy mô hình Lite offline trên máy.',
+            processingTimeMs: sw.elapsedMilliseconds.toDouble(),
+            modelStatus: const {'model_a': 'ready (trên máy)', 'model_b': 'lite (student TFLite fp16 trên máy)'},
+            drResult: lite.prediction,
+            drBranches: const [],
+            clinicalDisclaimer: LiteInferenceService.testNote,
+          );
+          state = state.copyWith(preprocessedBytes: lite.preprocessedJpeg);
+        } catch (e) {
+          res = PredictionResponse(
+            isFundus: true,
+            fundusConfidence: gateRes.confidence,
+            threshold: gateRes.threshold,
+            message: 'Ảnh đáy mắt hợp lệ, nhưng mô hình Lite không chạy được trên máy.',
+            drError: 'Lỗi mô hình Lite: $e. Kiểm tra file assets/models/${LiteInferenceService.modelAsset.split('/').last} hoặc dùng tab API.',
+          );
+        }
+        state = state.copyWith(isLoading: false, result: res, uploadProgress: 1.0, dashboardTab: 0);
+        _saveHistory(res);
+        return;
+      }
+
+      // 2b. API: GỬI LÊN SERVER ĐỂ CHẠY ENSEMBLE 6 LỚP (MODEL B)
       try {
         if (state.selectedFile != null) {
           res = await _apiClient.predictImageFile(
@@ -249,12 +298,24 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
         dashboardTab: 0,
       );
 
-      // Lưu tự động vào lịch sử khám cục bộ
+      _saveHistory(res);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
+      );
+    }
+  }
+
+  // Lưu tự động vào lịch sử khám cục bộ
+  void _saveHistory(PredictionResponse res) {
+      final prefix = mode == InferenceMode.lite ? '[Lite] ' : '';
       final record = ScreeningHistoryItem(
         id: 'REC-${DateTime.now().millisecondsSinceEpoch}',
-        patientName: state.selectedSample != null
-            ? '[Ảnh mẫu] ${state.selectedSample!.name}'
-            : 'Bệnh nhân ${DateTime.now().hour}:${DateTime.now().minute}',
+        patientName: prefix +
+            (state.selectedSample != null
+                ? '[Ảnh mẫu] ${state.selectedSample!.name}'
+                : 'Bệnh nhân ${DateTime.now().hour}:${DateTime.now().minute}'),
         patientId: 'BN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
         timestamp: DateTime.now(),
         imagePath: state.selectedFile?.path ?? '',
@@ -263,16 +324,15 @@ class DiagnosisNotifier extends StateNotifier<DiagnosisState> {
         response: res,
       );
       _ref.read(historyProvider.notifier).addRecord(record);
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString().replaceAll('Exception: ', ''),
-      );
-    }
   }
 }
 
+/// Mặc định (tab API). Tab Lite ghi đè provider này trong một ProviderScope con
+/// (xem main.dart), nên mọi màn hình/widget dùng chung code nhưng có state riêng.
 final diagnosisProvider = StateNotifierProvider<DiagnosisNotifier, DiagnosisState>((ref) {
   final client = ref.watch(apiClientProvider);
   return DiagnosisNotifier(client, ref);
 });
+
+DiagnosisNotifier createLiteDiagnosisNotifier(Ref ref) =>
+    DiagnosisNotifier(ref.watch(apiClientProvider), ref, mode: InferenceMode.lite);

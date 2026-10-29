@@ -104,3 +104,12 @@ frontend/src/App.jsx         tổng quan, Model B, giải thích
 ```
 
 Kết quả chỉ phục vụ nghiên cứu khóa luận và không thay kết luận của bác sĩ mắt.
+
+## Chế độ Lite (chạy trên trình duyệt)
+
+Web có công tắc **API / Lite** ngay trên nút phân tích (lựa chọn được nhớ trong `localStorage`).
+
+* **API**: ensemble 3 mô hình trên HF Space `slyviee/klcn-diabetic-retinopathy` (không đổi).
+* **Lite**: Model A (fundus gate ONNX 3.8 MB) + student EfficientNet-B4-448 hai đầu ra (ONNX fp32 70.2 MB) chạy bằng `onnxruntime-web` (wasm, được Vite đóng gói). Mô hình không nằm trong git; tải lười từ repo Hugging Face công khai `slyviee/klcn-dr-student-lite` (có thanh tiến trình), lưu bằng Cache API nên các lần sau không tải lại. Đổi nguồn bằng `VITE_LITE_MODEL_URL` / `VITE_LITE_GATE_URL` (xem `frontend/.env.example`). ONNX fp16 không nạp được trong ORT nên web dùng fp32.
+* Kết quả Lite có cùng dạng với phản hồi API (`dr_result`, 6 lớp, mô tả/khuyến nghị giống backend) nhưng không có Grad-CAM; hiển thị ảnh Ben Graham 512 thay thế. TEST SCORE 0.6820 so với ensemble 0.6861.
+* Mã: `frontend/src/lite/` (preprocess, decode, liteModel). Kiểm tra parity với Python: `lite_parity/`.
