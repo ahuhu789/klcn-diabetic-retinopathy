@@ -50,5 +50,5 @@ class ClinicalConstants {
 
   // Tuyên bố miễn trừ trách nhiệm y khoa
   static const String clinicalDisclaimer =
-      'CẢNH BÁO Y KHOA: Hệ thống AI RetinaGuard Mobile được phát triển phục vụ mục đích nghiên cứu học thuật và hỗ trợ sàng lọc sơ bộ tại điểm khám. Kết quả dự đoán KHÔNG THAY THẾ cho chẩn đoán của bác sĩ chuyên khoa mắt. Mọi quyết định can thiệp lâm sàng cần được thăm khám trực tiếp bởi bác sĩ nhãn khoa.';
+      'Ứng dụng phục vụ nghiên cứu khóa luận cử nhân. Kết quả chỉ hỗ trợ sàng lọc, KHÔNG thay thế chẩn đoán của bác sĩ chuyên khoa mắt.';
 }

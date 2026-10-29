@@ -268,10 +268,10 @@ export default function App() {
       {/* Hero Banner */}
       <section className="hero">
         <div className="container">
-          <div className="hero-tag">Khóa Luận Tốt Nghiệp Đại Học • Hệ Thống AI Y Tế</div>
+          <div className="hero-tag">Khóa luận cử nhân</div>
           <h1>Nghiên cứu Vision Transformer và phân loại <span>6 lớp ảnh đáy mắt</span></h1>
           <p>
-            Ảnh đi qua <strong>Model A (Fundus Gate, τ = 0.965)</strong> trên ảnh gốc. Nếu hợp lệ, <strong>Model B</strong> áp Ben Graham 512 rồi ensemble ViT-B/16-384 (0.45), EfficientNet-B4-448 (0.40) và EfficientNet-B4-448 hai đầu ra (0.15). Lớp 0–4 là thang DR. Lớp 5 là nhóm tổn thương không phải DR, không phải tên một bệnh.
+            <strong>Model A</strong> kiểm tra ảnh đáy mắt (τ = 0.965). <strong>Model B</strong> phân loại 6 lớp: 0–4 là mức độ DR, 5 là tổn thương không phải DR.
           </p>
         </div>
       </section>
@@ -309,7 +309,7 @@ export default function App() {
                 </div>
                 <h3 className="dropzone-heading">Kéo thả ảnh hoặc bấm để chọn tệp</h3>
                 <p className="dropzone-desc">
-                  Hỗ trợ: JPEG, PNG, WEBP (Ảnh đáy võng mạc hoặc ảnh bất kỳ để kiểm thử cổng Gate)
+                  JPEG, PNG, WEBP
                 </p>
                 <span className="btn-browse">Chọn tệp từ thiết bị</span>
               </div>
@@ -342,7 +342,7 @@ export default function App() {
                 <div className="samples-header-row">
                   <div className="samples-label">
                     <Layers size={14} />
-                    <span>Bộ sưu tập ảnh mẫu kiểm định lâm sàng:</span>
+                    <span>Ảnh mẫu:</span>
                   </div>
                   <span className="samples-count-pill">{samples.length} mẫu</span>
                 </div>
@@ -443,12 +443,12 @@ export default function App() {
               {loading ? (
                 <>
                   <div className="spinner"></div>
-                  <span>{isLite ? 'Đang chạy mô hình Lite trên trình duyệt...' : 'Đang thực thi Models A + B + C song song...'}</span>
+                  <span>{isLite ? 'Đang chạy mô hình Lite trên trình duyệt...' : 'Đang phân tích...'}</span>
                 </>
               ) : (
                 <>
                   <Activity size={18} />
-                  <span>{isLite ? 'Phân tích bằng mô hình Lite (offline)' : 'Phân tích Toàn diện (Models A + B + C)'}</span>
+                  <span>{isLite ? 'Phân tích (Lite)' : 'Phân tích (API)'}</span>
                 </>
               )}
             </button>
@@ -457,7 +457,7 @@ export default function App() {
               <div className="alert-error">
                 <RefreshCw size={18} className="flex-shrink-0" />
                 <div>
-                  <strong>Máy chủ đang khởi động...</strong> Máy chủ AI (Hugging Face Space) ngủ khi không có người dùng và cần 1-2 phút để nạp lại 3 mô hình. Trang sẽ tự kết nối lại.
+                  <strong>Máy chủ đang khởi động</strong> (1–2 phút). Trang sẽ tự kết nối lại.
                 </div>
               </div>
             )}
@@ -471,14 +471,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Model Pipeline Specs Note */}
-            <div className="pipeline-specs-note">
-              <div className="specs-title">
-                <Info size={14} />
-                <span>Quy chuẩn công nghệ độc lập:</span>
-              </div>
-              <p>Mỗi mô hình sử dụng tiền xử lý và mạng nơ-ron riêng biệt. Không có mô hình nào ghi đè hoặc giả lập kết quả của mô hình khác.</p>
-            </div>
           </div>
 
           {/* Right Column: Multi-Model AI Diagnostic Dashboard */}
@@ -486,7 +478,7 @@ export default function App() {
             <div className="card-header">
               <div className="card-title">
                 <Layers size={18} className="text-primary" />
-                <span>Bảng điều khiển Kết quả Chẩn đoán Y khoa</span>
+                <span>Kết quả</span>
               </div>
               {result && (
                 <div className="processing-badge">
@@ -502,15 +494,8 @@ export default function App() {
                 <div className="empty-icon-circle">
                   <Eye size={42} strokeWidth={1.5} />
                 </div>
-                <h4>Hệ thống sẵn sàng tiếp nhận ảnh</h4>
-                <p>
-                  Vui lòng tải ảnh lên hoặc chọn ảnh mẫu bên trái, sau đó nhấn nút <strong>"Phân tích Toàn diện"</strong>.
-                </p>
-                <div className="empty-feature-list">
-                  <div className="feature-item">✓ Model A kiểm tra ảnh đáy mắt hợp lệ</div>
-                  <div className="feature-item">✓ Model B phân loại 6 lớp sau tiền xử lý Ben Graham</div>
-                  <div className="feature-item">✓ Kết quả báo cáo là ensemble ViT 0.45 + EffB4 0.40 + EffB4 hai đầu ra 0.15</div>
-                </div>
+                <h4>Chưa có ảnh</h4>
+                <p>Tải ảnh hoặc chọn ảnh mẫu rồi bấm Phân tích.</p>
               </div>
             )}
 
@@ -536,7 +521,7 @@ export default function App() {
                 )}
                 {!isLite && wakingHint && (
                   <p className="loading-step">
-                    <strong>Máy chủ đang khởi động hoặc đang bận.</strong> Máy chủ chạy CPU miễn phí nên lần đầu có thể mất 1-2 phút, vui lòng chờ...
+                    <strong>Máy chủ đang khởi động hoặc bận</strong>, lần đầu có thể mất 1–2 phút.
                   </p>
                 )}
               </div>
@@ -576,13 +561,13 @@ export default function App() {
                   <div className="rejection-card">
                     <div className="rejection-title">
                       <AlertTriangle size={18} />
-                      <span>Pipeline tự động dừng: Bảo vệ an toàn chẩn đoán y khoa</span>
+                      <span>Ảnh không phải ảnh đáy mắt</span>
                     </div>
                     <p className="rejection-p">
-                      Khi ảnh không đạt chuẩn đáy võng mạc, <strong>Model B không được chạy</strong>.
+                      Model B không được chạy.
                     </p>
                     <button className="btn-re-upload" onClick={() => fileInputRef.current?.click()}>
-                      Tải lên ảnh chụp đáy võng mạc hợp lệ khác
+                      Chọn ảnh khác
                     </button>
                   </div>
                 )}
@@ -597,7 +582,7 @@ export default function App() {
                         onClick={() => setDashboardTab('overview')}
                       >
                         <BarChart3 size={15} />
-                        <span>Tổng quan Chẩn đoán</span>
+                        <span>Tổng quan</span>
                       </button>
                       <button 
                         className={`dash-tab ${dashboardTab === 'model_b' ? 'active' : ''}`}
@@ -611,7 +596,7 @@ export default function App() {
                         onClick={() => setDashboardTab('explanation')}
                       >
                         <HelpCircle size={15} />
-                        <span>Giải thích & Disclaimer</span>
+                        <span>Giải thích</span>
                       </button>
                     </div>
 
@@ -767,7 +752,7 @@ export default function App() {
                             <div className="heatmap-section">
                               <div className="section-label">
                                 <Sparkles size={14} />
-                                <span>Trực quan hóa Bản đồ nhiệt Chú ý (XAI Grad-CAM Heatmaps)</span>
+                                <span>Bản đồ nhiệt Grad-CAM</span>
                               </div>
 
                               <div className="view-tabs">
@@ -836,7 +821,7 @@ export default function App() {
                                 </div>
                               )}
                               <p className="heatmap-note">
-                                * Vùng màu đỏ/cam biểu thị khu vực các mạng nơ-ron tập trung trọng số kích hoạt khi đưa ra quyết định phân loại tổn thương. Grad-CAM của mọi nhánh lấy lớp do ensemble chọn; heatmap ensemble là tổng có trọng số 0.45 / 0.40 / 0.15.
+                                * Vùng đỏ/cam là nơi mô hình chú ý nhiều nhất. Heatmap ensemble là tổng có trọng số 0.45 / 0.40 / 0.15.
                               </p>
                             </div>
                             )}
@@ -876,12 +861,12 @@ export default function App() {
                               </div>
 
                               <div className="detail-box">
-                                <span className="detail-box-title">Đặc điểm tổn thương võng mạc:</span>
+                                <span className="detail-box-title">Đặc điểm:</span>
                                 <p>{currentDR.description}</p>
                               </div>
 
                               <div className="detail-box advice-box">
-                                <span className="detail-box-title">Khuyến nghị can thiệp lâm sàng:</span>
+                                <span className="detail-box-title">Khuyến nghị:</span>
                                 <p>{currentDR.advice}</p>
                               </div>
 
@@ -955,14 +940,11 @@ export default function App() {
                           <div className="exp-section disclaimer-section">
                             <div className="disclaimer-header">
                               <AlertTriangle size={20} className="text-warning" />
-                              <h4>Tuyên bố Miễn trừ Trách nhiệm Y khoa (Official Medical Disclaimer)</h4>
+                              <h4>Lưu ý y khoa</h4>
                             </div>
                             <blockquote className="disclaimer-quote">
-                              {result.clinical_disclaimer || "Ứng dụng được phát triển phục vụ nghiên cứu khóa luận tốt nghiệp. Kết quả từ mô hình AI chỉ mang tính chất hỗ trợ sàng lọc và không thay thế kết luận của bác sĩ chuyên khoa mắt."}
+                              {result.clinical_disclaimer || "Ứng dụng phục vụ nghiên cứu khóa luận cử nhân. Kết quả chỉ hỗ trợ sàng lọc, không thay thế chẩn đoán của bác sĩ chuyên khoa mắt."}
                             </blockquote>
-                            <p className="disclaimer-note">
-                              Hệ thống được phát triển phục vụ mục đích nghiên cứu học thuật, nghiên cứu đối chuẩn mô hình thị giác máy tính và hỗ trợ kỹ thuật số cho sinh viên, học viên nhãn khoa. Mọi quyết định can thiệp lâm sàng hoặc phẫu thuật bắt buộc phải được chỉ định trực tiếp bởi bác sĩ nhãn khoa qua thăm khám đèn khe và chụp mạch huỳnh quang.
-                            </p>
                           </div>
                         </div>
                       </div>
@@ -980,7 +962,7 @@ export default function App() {
         <div className="container">
           <div className="footer-content">
             <div>
-              <strong>Khóa luận Tốt nghiệp Đại học</strong> • Đề tài: Nghiên cứu Vision Transformer và ứng dụng phân loại mức độ bệnh võng mạc đái tháo đường từ ảnh đáy võng mạc mắt.
+              <strong>Khóa luận cử nhân</strong> • Đề tài: Nghiên cứu Vision Transformer và ứng dụng phân loại mức độ bệnh võng mạc đái tháo đường từ ảnh đáy võng mạc mắt.
             </div>
             <div className="footer-sub">
               Model A (MobileNetV3 Gate) • Model B (ensemble ViT-B/16-384 0.45, EfficientNet-B4-448 0.40, EfficientNet-B4-448 hai đầu ra 0.15; 6 lớp).

@@ -161,7 +161,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
-                          'HỆ THỐNG 3 MÔ HÌNH HỌC SÂU ĐỘC LẬP',
+                          'KHÓA LUẬN CỬ NHÂN',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 9,
@@ -177,7 +177,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Sàng lọc Lưu động & Tele-Ophthalmology',
+                    'Sàng lọc bệnh võng mạc đái tháo đường',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,

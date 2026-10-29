@@ -1,6 +1,6 @@
 # Nghiên cứu Vision Transformer và Ứng dụng Phân loại Mức độ Bệnh Võng mạc Đái tháo đường từ Ảnh Đáy Võng mạc Mắt
 
-## Khóa Luận Tốt Nghiệp - Ngành Công nghệ Thông tin
+## Khóa Luận Cử Nhân - Ngành Công nghệ Thông tin
 **Trường Đại học Công Thương TP. Hồ Chí Minh (HUIT) - Khoa Công nghệ Thông tin**
 
 ---

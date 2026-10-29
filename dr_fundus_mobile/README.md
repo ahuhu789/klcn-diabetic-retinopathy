@@ -1,6 +1,6 @@
 # RetinaGuard Mobile: cổng ảnh trên máy và ensemble 6 lớp trên server
 
-> **Khóa Luận Tốt Nghiệp Ngành Công Nghệ Thông Tin**  
+> **Khóa Luận Cử Nhân Ngành Công Nghệ Thông Tin**  
 > **Trường Đại học Công Thương TP. Hồ Chí Minh (HUIT)**  
 > **Đề tài:** Nghiên cứu Vision Transformer và ứng dụng phân loại mức độ bệnh võng mạc đái tháo đường từ ảnh đáy võng mạc mắt  
 > **GVHD:** ThS. Trần Đình Toàn  
@@ -10,7 +10,7 @@
 
 ## 📱 1. Giới thiệu Ứng dụng Di động (Mobile App Overview)
 
-**RetinaGuard Mobile** là ứng dụng di động đa nền tảng (Flutter) được phát triển nhằm hiện thực hóa mô hình **Khám sàng lọc lưu động (Point-of-Care Screening)** và **Y tế từ xa (Tele-ophthalmology)** cho đề tài khóa luận tốt nghiệp:
+**RetinaGuard Mobile** là ứng dụng di động đa nền tảng (Flutter) được phát triển nhằm hiện thực hóa mô hình **Khám sàng lọc lưu động (Point-of-Care Screening)** và **Y tế từ xa (Tele-ophthalmology)** cho đề tài khóa luận cử nhân:
 
 - 📷 **Chụp ảnh trực tiếp từ Camera:** Tương thích với các bộ chuyển đổi kính soi đáy mắt cầm tay (Handheld Ophthalmoscope Smartphone Adapter) dùng cho trạm y tế tuyến cơ sở.
 - 🖼️ **Nạp ảnh từ Thư viện & Bộ sưu tập 10 ảnh mẫu:** Tích hợp sẵn 10 mẫu ảnh đáy mắt chuẩn y khoa (Khỏe mạnh, Thoái hóa hoàng điểm AMD, Glaucoma, Cận thị thoái hóa MYA, Tắc tĩnh mạch BRVO, DR Cấp 1–4) để demo trước Hội đồng.
