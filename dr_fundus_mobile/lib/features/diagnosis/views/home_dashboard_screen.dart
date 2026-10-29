@@ -314,6 +314,11 @@ class HomeDashboardScreen extends ConsumerWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Chỉ hỗ trợ ảnh chụp từ máy chụp đáy mắt (không dùng ảnh chụp màn hình hay ảnh chụp lại bằng điện thoại).',
+                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    ),
                     const SizedBox(height: 14),
                   ],
 

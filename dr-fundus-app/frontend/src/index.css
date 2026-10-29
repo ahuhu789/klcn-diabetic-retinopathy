@@ -1737,3 +1737,14 @@ body {
 @media (max-width: 640px) {
   .mode-switch { grid-template-columns: 1fr; }
 }
+
+.low-conf-warning {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}

@@ -25,6 +25,9 @@ import { predictLite, isLiteCached, LITE_TEST_NOTE, LITE_MODEL_URL } from './lit
 
 // API origin. Default: the Hugging Face Space. Set VITE_API_URL="" to use the
 // same-origin /api (Vite dev proxy or FastAPI serving dist), or any other backend URL.
+// Below this probability of the chosen class the result is flagged (test sample: 39% flagged,
+// accuracy 0.53 vs 0.79 for the rest).
+const LOW_CONFIDENCE = 0.6;
 const DEFAULT_API_URL = 'https://slyviee-klcn-diabetic-retinopathy.hf.space';
 const API_ORIGIN = (import.meta.env.VITE_API_URL ?? DEFAULT_API_URL).trim().replace(/\/+$/, '');
 const API_BASE = `${API_ORIGIN}/api`;
@@ -309,7 +312,7 @@ export default function App() {
                 </div>
                 <h3 className="dropzone-heading">Kéo thả ảnh hoặc bấm để chọn tệp</h3>
                 <p className="dropzone-desc">
-                  JPEG, PNG, WEBP
+                  JPEG, PNG, WEBP. Chỉ hỗ trợ ảnh chụp từ máy chụp đáy mắt (không dùng ảnh chụp màn hình hay ảnh chụp lại bằng điện thoại).
                 </p>
                 <span className="btn-browse">Chọn tệp từ thiết bị</span>
               </div>
@@ -622,6 +625,11 @@ export default function App() {
                                   <span>Xác suất lớp được chọn:</span>
                                   <strong>{(result.dr_result.confidence * 100).toFixed(1)}%</strong>
                                 </div>
+                                {result.dr_result.confidence < LOW_CONFIDENCE && (
+                                  <div className="low-conf-warning" role="alert">
+                                    ⚠ Độ tin cậy thấp ({(result.dr_result.confidence * 100).toFixed(0)}% &lt; {LOW_CONFIDENCE * 100}%): kết quả dễ sai, nên chụp lại ảnh rõ hơn hoặc hỏi ý kiến bác sĩ.
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="summary-error">
@@ -859,6 +867,11 @@ export default function App() {
                                   {currentDR.badge}
                                 </div>
                               </div>
+                              {currentDR.confidence < LOW_CONFIDENCE && (
+                                  <div className="low-conf-warning" role="alert">
+                                    ⚠ Độ tin cậy thấp ({(currentDR.confidence * 100).toFixed(0)}% &lt; {LOW_CONFIDENCE * 100}%): kết quả dễ sai, nên chụp lại ảnh rõ hơn hoặc hỏi ý kiến bác sĩ.
+                                  </div>
+                                )}
 
                               <div className="detail-box">
                                 <span className="detail-box-title">Đặc điểm:</span>

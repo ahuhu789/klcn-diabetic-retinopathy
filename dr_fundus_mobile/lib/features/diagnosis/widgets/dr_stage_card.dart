@@ -3,6 +3,10 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/clinical_constants.dart';
 import '../../../models/dr_prediction.dart';
 
+/// Below this probability of the chosen class the result is flagged as low confidence
+/// (test sample: 39% flagged, accuracy 0.53 vs 0.79 for the rest).
+const double lowConfidenceThreshold = 0.6;
+
 class DRStageCard extends StatelessWidget {
   final DRPrediction drResult;
 
@@ -104,6 +108,22 @@ class DRStageCard extends StatelessWidget {
               ),
             ],
           ),
+          if (drResult.confidence < lowConfidenceThreshold) ...[
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.warning),
+              ),
+              child: Text(
+                '⚠ Độ tin cậy thấp (${(drResult.confidence * 100).toStringAsFixed(0)}% < ${(lowConfidenceThreshold * 100).toStringAsFixed(0)}%): kết quả dễ sai, nên chụp lại ảnh rõ hơn hoặc hỏi ý kiến bác sĩ.',
+                style: const TextStyle(fontSize: 12, color: AppColors.warning, height: 1.35),
+              ),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             drResult.description,

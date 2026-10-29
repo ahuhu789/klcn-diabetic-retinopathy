@@ -120,40 +120,40 @@ SAMPLE_METADATA = {
         "badge_color": "rose",
         "description": "Xuất huyết dạng ngọn lửa và phù nề dọc theo phân nhánh tĩnh mạch thái dương bị tắc nghẽn."
     },
-    "IDRiD_001.jpg": {
-        "name": "Võng mạc Tiểu đường Nặng (Stage 3)",
-        "category": "Đái tháo đường (DR)",
-        "tag": "DR Cấp 3 (Nặng)",
-        "badge_color": "red",
-        "description": "Nhiều xuất huyết võng mạc sâu, xuất tiết cứng và vi phình mạch lan tỏa ở 4 góc phần tư."
+    "DR0_EyePACS_40927_left.jpg": {
+        "name": "DR cấp 0 – Không bệnh (EyePACS)",
+        "category": "Khỏe mạnh",
+        "tag": "DR cấp 0",
+        "badge_color": "emerald",
+        "description": "Ảnh tập test chính thức (EyePACS 40927_left), nhãn gốc: cấp 0, không có tổn thương DR."
     },
-    "IDRiD_002.jpg": {
-        "name": "Võng mạc Tiểu đường Vừa (Stage 2)",
+    "DR1_EyePACS_36566_left.jpg": {
+        "name": "DR cấp 1 – Nhẹ (EyePACS)",
         "category": "Đái tháo đường (DR)",
-        "tag": "DR Cấp 2 (Vừa)",
-        "badge_color": "orange",
-        "description": "Vi phình mạch vi tuần hoàn kèm rải rác xuất tiết và xuất huyết đốm nhẹ."
-    },
-    "IDRiD_003.jpg": {
-        "name": "Võng mạc Tiểu đường Tăng sinh (Stage 4)",
-        "category": "Đái tháo đường (DR)",
-        "tag": "DR Cấp 4 (Tăng sinh)",
-        "badge_color": "red",
-        "description": "Hình thành tân mạch võng mạc (Neovascularization), xuất huyết dịch kính nghiêm trọng."
-    },
-    "IDRiD_004.jpg": {
-        "name": "Võng mạc Tiểu đường Nhẹ (Stage 1)",
-        "category": "Đái tháo đường (DR)",
-        "tag": "DR Cấp 1 (Nhẹ)",
+        "tag": "DR cấp 1 (Nhẹ)",
         "badge_color": "amber",
-        "description": "Giai đoạn khởi phát: chỉ xuất hiện các nốt vi phình mạch nhỏ (Microaneurysms) đơn độc."
+        "description": "Ảnh tập test chính thức (EyePACS 36566_left), nhãn gốc: cấp 1, vi phình mạch đơn lẻ."
     },
-    "IDRiD_005.jpg": {
-        "name": "Võng mạc Tiểu đường Tiền Tăng sinh",
+    "DR2_EyePACS_31305_left.jpg": {
+        "name": "DR cấp 2 – Trung bình (EyePACS)",
         "category": "Đái tháo đường (DR)",
-        "tag": "DR Nghi ngờ cao",
+        "tag": "DR cấp 2 (Vừa)",
+        "badge_color": "orange",
+        "description": "Ảnh tập test chính thức (EyePACS 31305_left), nhãn gốc: cấp 2, xuất huyết và xuất tiết rải rác."
+    },
+    "DR3_EyePACS_27224_right.jpg": {
+        "name": "DR cấp 3 – Nặng (EyePACS)",
+        "category": "Đái tháo đường (DR)",
+        "tag": "DR cấp 3 (Nặng)",
         "badge_color": "red",
-        "description": "Tổn thương vi mạch tiến triển mạnh, thiếu máu võng mạc diện rộng."
+        "description": "Ảnh tập test chính thức (EyePACS 27224_right), nhãn gốc: cấp 3, xuất huyết lan tỏa nhiều góc phần tư."
+    },
+    "DR4_EyePACS_4086_left.jpg": {
+        "name": "DR cấp 4 – Tăng sinh (EyePACS)",
+        "category": "Đái tháo đường (DR)",
+        "tag": "DR cấp 4 (Tăng sinh)",
+        "badge_color": "red",
+        "description": "Ảnh tập test chính thức (EyePACS 4086_left), nhãn gốc: cấp 4, có tân mạch."
     }
 }
 
@@ -170,11 +170,11 @@ def list_samples():
         "GLAUCOMA_001.jpg",
         "MYA_001.jpg",
         "BRVO_001.jpg",
-        "IDRiD_001.jpg",
-        "IDRiD_002.jpg",
-        "IDRiD_003.jpg",
-        "IDRiD_004.jpg",
-        "IDRiD_005.jpg"
+        "DR0_EyePACS_40927_left.jpg",
+        "DR1_EyePACS_36566_left.jpg",
+        "DR2_EyePACS_31305_left.jpg",
+        "DR3_EyePACS_27224_right.jpg",
+        "DR4_EyePACS_4086_left.jpg"
     ]
     
     existing_files = set(os.listdir(SAMPLES_DIR))
